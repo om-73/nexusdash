@@ -1,0 +1,16 @@
+[
+  {
+    "id": "1768146195885",
+    "email": "verify_agent_2@test.com",
+    "password": "$2a$10$FV/9PGT/a0VJoKCzeNAkTetH/Dn6452i3ip.p9d/pm4EUC.L9YV.q",
+    "role": "viewer",
+    "createdAt": "2026-01-11T15:43:15.885Z"
+  },
+  {
+    "id": "1768146427091",
+    "email": "verify_agent_3@test.com",
+    "password": "$2a$10$NFU.Fi.HAWvSZ5QgAQ7aM.n8gF5fEgaG2BRBJwwZjNCW3cPiz0XXW",
+    "role": "viewer",
+    "createdAt": "2026-01-11T15:47:07.092Z"
+  }
+]

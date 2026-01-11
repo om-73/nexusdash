@@ -1,0 +1,33 @@
+services:
+  # 1. Python Data Engine
+  - type: web
+    name: data-engine
+    env: python
+    region: oregon
+    plan: free
+    rootDir: data_engine
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.13
+      - key: OPENAI_API_KEY
+        sync: false # User must set this in dashboard
+
+  # 2. Node.js Backend Server
+  - type: web
+    name: backend-server
+    env: node
+    region: oregon
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 18.x
+      - key: PYTHON_ENGINE_URL
+        fromService:
+            type: web
+            name: data-engine
+            property: url
