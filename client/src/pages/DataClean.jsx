@@ -126,9 +126,9 @@ export default function DataClean() {
     };
 
     return (
-        <div className="p-8 max-w-7xl mx-auto flex gap-8 relative">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto flex flex-col lg:flex-row gap-6 md:gap-8 relative">
             {!hasData && (
-                <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex items-center justify-center">
+                <div className="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm flex items-center justify-center">
                     <div className="bg-white p-8 rounded-2xl shadow-xl text-center border border-slate-200 max-w-md">
                         <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
                             <Activity size={32} />
@@ -146,7 +146,7 @@ export default function DataClean() {
             )}
 
             {/* Sidebar Actions */}
-            <div className={`w-80 space-y-6 overflow-y-auto h-[calc(100vh-100px)] pr-2 ${!hasData ? 'blur-sm pointer-events-none opacity-50' : ''}`}>
+            <div className={`w-full lg:w-80 space-y-6 lg:overflow-y-auto lg:h-[calc(100vh-100px)] pr-2 ${!hasData ? 'blur-sm pointer-events-none opacity-50' : ''}`}>
                 <div>
                     <h2 className="text-xl font-bold text-slate-800 mb-2">Cleaning Tools</h2>
                     <p className="text-sm text-slate-500 mb-4">Apply transformations to your dataset.</p>

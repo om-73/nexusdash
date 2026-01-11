@@ -20,12 +20,17 @@ app.use((req, res, next) => {
     next();
 });
 
+const { setupCleanupSchedule } = require('./utils/fileCleanup');
+
 // Uploads directory
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir);
 }
 app.use('/uploads', express.static(uploadDir));
+
+// Initialize Auto-Cleanup
+setupCleanupSchedule(uploadDir);
 
 // Routes
 // Routes

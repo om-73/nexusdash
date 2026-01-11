@@ -1,4 +1,3 @@
-```
 import React, { useState, useEffect, useRef } from 'react';
 import { useData } from '../context/DataContext';
 import { saveDashboard, listDashboards, getDashboard } from '../services/api';
@@ -102,7 +101,8 @@ class ErrorBoundary extends React.Component {
 function DashboardContent() {
     const { dataSummary, dataPreview } = useData();
     const [dashboards, setDashboards] = useState([]);
-    const [currentLayout, setCurrentLayout] = useState([]);
+    const [widgets, setWidgets] = useState([]);
+    const [layouts, setLayouts] = useState({ lg: [], md: [], sm: [] });
     const [dashboardName, setDashboardName] = useState('My Dashboard');
     const [showAddModal, setShowAddModal] = useState(false);
     const [mounted, setMounted] = useState(false);
@@ -133,15 +133,17 @@ function DashboardContent() {
     };
 
     const handleSave = async () => {
-        if (!currentLayout.length) return;
+        if (!widgets.length) return;
         try {
-            await saveDashboard(dashboardName, currentLayout);
+            // Save both widgets (logic) and layouts (positions)
+            const payload = { widgets, layouts };
+            await saveDashboard(dashboardName, payload);
             alert("Dashboard saved!");
             loadDashboards();
         } catch (err) {
             console.error(err);
             const msg = err.response?.data?.error || err.response?.data?.detail || err.message;
-            alert(`Failed to save: ${ msg } `);
+            alert('Failed to save: ' + msg);
         }
     };
 
@@ -150,7 +152,19 @@ function DashboardContent() {
             const dash = await getDashboard(id);
             if (dash) {
                 setDashboardName(dash.name);
-                setCurrentLayout(dash.layout);
+
+                // Handle legacy format (array) vs new format (object)
+                if (Array.isArray(dash.layout)) {
+                    // Legacy: Config and Layout were mixed.
+                    // Separate them for migration.
+                    const legacyMixin = dash.layout;
+                    setWidgets(legacyMixin); // It has config data
+                    setLayouts({ lg: legacyMixin, md: legacyMixin, sm: legacyMixin });
+                } else if (dash.layout && dash.layout.widgets) {
+                    // New Format
+                    setWidgets(dash.layout.widgets);
+                    setLayouts(dash.layout.layouts || { lg: [], md: [], sm: [] });
+                }
             }
         } catch (err) {
             console.error(err);
@@ -158,20 +172,40 @@ function DashboardContent() {
     };
 
     const addWidget = () => {
-        const newItem = {
-            ...newWidget,
-            id: Date.now(),
-            x: (currentLayout.length * 2) % 4,
-            y: Infinity, // puts it at the bottom
+        const id = String(Date.now());
+        const newItemConfig = { ...newWidget, id };
+
+        // Add to widgets list
+        setWidgets([...widgets, newItemConfig]);
+
+        // Add default layout item for all breakpoints
+        const newLayoutItem = {
+            i: id,
+            x: 0,
+            y: Infinity, // Bottom
             w: 2,
             h: 3
         };
-        setCurrentLayout([...currentLayout, newItem]);
+
+        setLayouts(prev => ({
+            ...prev,
+            lg: [...(prev.lg || []), newLayoutItem],
+            md: [...(prev.md || []), newLayoutItem],
+            sm: [...(prev.sm || []), { ...newLayoutItem, w: 1 }] // Mobile takes full width usually
+        }));
+
         setShowAddModal(false);
     };
 
     const removeWidget = (id) => {
-        setCurrentLayout(currentLayout.filter(w => w.id !== id));
+        setWidgets(widgets.filter(w => String(w.id) !== String(id)));
+        setLayouts(prev => {
+            const next = { ...prev };
+            Object.keys(next).forEach(bp => {
+                next[bp] = (next[bp] || []).filter(l => l.i !== String(id));
+            });
+            return next;
+        });
     };
 
     // Helper to process data for charts
@@ -222,29 +256,29 @@ function DashboardContent() {
     const columns = dataSummary.columns;
 
     return (
-        <div id="dashboard-content" className="p-8 max-w-7xl mx-auto space-y-8">
-            <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                <div className="flex items-center gap-4">
+        <div id="dashboard-content" className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8">
+            <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
+                <div className="flex items-center gap-4 w-full md:w-auto">
                     <Layout className="text-indigo-600" />
                     <input
                         value={dashboardName}
                         onChange={(e) => setDashboardName(e.target.value)}
-                        className="text-xl font-bold text-slate-800 border-none focus:ring-0"
+                        className="text-xl font-bold text-slate-800 border-none focus:ring-0 w-full md:w-auto"
                     />
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 w-full md:w-auto justify-end">
                     <select
                         onChange={(e) => handleLoad(e.target.value)}
-                        className="px-4 py-2 border rounded-lg text-sm"
+                        className="px-4 py-2 border rounded-lg text-sm bg-white"
                     >
                         <option value="">Load Dashboard...</option>
                         {dashboards.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
-                    <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors">
-                        <Plus size={18} /> Add Widget
+                    <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors text-sm">
+                        <Plus size={18} /> Add
                     </button>
-                    <ReportGenerator targetId="dashboard-content" fileName={`${ dashboardName }.pdf`} />
-                    <button onClick={handleSave} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md transition-all">
+                    <ReportGenerator targetId="dashboard-content" fileName={dashboardName + '.pdf'} />
+                    <button onClick={handleSave} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md transition-all text-sm">
                         <Save size={18} /> Save
                     </button>
                 </div>
@@ -253,34 +287,18 @@ function DashboardContent() {
             {/* Draggable Grid Layout */}
             <ResponsiveGridLayout
                 className="layout"
-                layouts={{ lg: currentLayout }}
+                layouts={layouts}
                 breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-                cols={{ lg: 4, md: 4, sm: 2, xs: 1, xxs: 1 }}
+                cols={{ lg: 4, md: 3, sm: 2, xs: 1, xxs: 1 }}
                 rowHeight={100}
-                onLayoutChange={(layout) => {
-                    const updated = currentLayout.map(w => {
-                        const match = layout.find(l => String(l.i) === String(w.id));
-                        return match ? { ...w, ...match } : w;
-                    });
-                    if (JSON.stringify(updated) !== JSON.stringify(currentLayout)) {
-                        setCurrentLayout(updated);
-                    }
+                onLayoutChange={(currentLayout, allLayouts) => {
+                    setLayouts(allLayouts);
                 }}
+                margin={[16, 16]}
             >
-                {currentLayout.map((widget) => {
-                    const gridItemProps = {
-                        key: String(widget.id),
-                        "data-grid": {
-                            x: widget.x || 0,
-                            y: widget.y || 0,
-                            w: widget.w || 2,
-                            h: widget.h || 3,
-                            i: String(widget.id)
-                        }
-                    };
-
+                {widgets.map((widget) => {
                     return (
-                        <div key={widget.id} {...gridItemProps} className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 flex flex-col group hover:shadow-md transition-shadow overflow-hidden">
+                        <div key={String(widget.id)} className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 flex flex-col group hover:shadow-md transition-shadow overflow-hidden">
                             <div className="flex justify-between items-start mb-1 px-1 cursor-grab active:cursor-grabbing handle">
                                 <h3 className="font-semibold text-slate-700 text-sm truncate pr-2">{widget.title}</h3>
                                 <button
@@ -374,11 +392,11 @@ function DashboardContent() {
                                                 outerRadius="70%"
                                                 paddingAngle={5}
                                                 dataKey="value"
-                                                label={({ percent }) => `${ (percent * 100).toFixed(0) }% `}
+                                                label={({ percent }) => (percent * 100).toFixed(0) + '%'}
                                                 labelLine={false}
                                             >
                                                 {processData(widget).map((entry, index) => (
-                                                    <Cell key={`cell - ${ index } `} fill={COLORS[index % COLORS.length]} />
+                                                    <Cell key={'cell-' + index} fill={COLORS[index % COLORS.length]} />
                                                 ))}
                                             </Pie>
                                             <Tooltip />
@@ -416,7 +434,7 @@ function DashboardContent() {
                 })}
             </ResponsiveGridLayout>
 
-            {currentLayout.length === 0 && (
+            {widgets.length === 0 && (
                 <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl text-slate-400">
                     <Grid size={48} className="mb-4 text-slate-300" />
                     <p>No widgets yet. Click "Add Widget" to build your dashboard.</p>
