@@ -45,7 +45,8 @@ app.use('/api/data', require('./routes/dataRoutes')); // We will apply protectio
 app.use(express.static(path.join(__dirname, '../client/dist')));
 
 // Handle React routing, return all requests to React app
-app.get('*', (req, res) => {
+// Handle React routing, return all requests to React app
+app.get(/(.*)/, (req, res) => {
     res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
 });
 
