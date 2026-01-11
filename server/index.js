@@ -41,8 +41,12 @@ app.use('/api/data', require('./routes/dataRoutes')); // We will apply protectio
 // const { authenticate } = require('./middleware/authMiddleware');
 // app.use('/api/data', authenticate, require('./routes/dataRoutes'));
 
-app.get('/', (req, res) => {
-    res.send('Data Analysis Platform API is running');
+// Serve static files from the React client
+app.use(express.static(path.join(__dirname, '../client/dist')));
+
+// Handle React routing, return all requests to React app
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
 });
 
 app.listen(PORT, () => {

@@ -1,0 +1,16 @@
+{
+    "name": "nexusdash-root",
+    "version": "1.0.0",
+    "description": "Root package for deployment",
+    "main": "server/index.js",
+    "scripts": {
+        "start": "node server/index.js",
+        "build": "npm install --prefix server && npm install --prefix client && npm run build --prefix client"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "engines": {
+        "node": ">=16.0.0"
+    }
+}
