@@ -12,7 +12,7 @@ import DataClean from './pages/DataClean';
 import EDA from './pages/EDA';
 import Model from './pages/Model';
 import CustomDashboard from './pages/CustomDashboard';
-import Login from './pages/Login';
+import CustomDashboard from './pages/CustomDashboard';
 
 function App() {
   return (
