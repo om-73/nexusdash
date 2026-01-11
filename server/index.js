@@ -32,7 +32,10 @@ app.use('/uploads', express.static(uploadDir));
 // Initialize Auto-Cleanup
 setupCleanupSchedule(uploadDir);
 
-// Routes
+// Initialize Auth (Seed default user)
+const { initializeDefaultUser } = require('./utils/authUtils');
+initializeDefaultUser();
+
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/upload', require('./routes/uploadRoutes')); // Uploads might need protection too, but sticking to data for now

@@ -62,3 +62,19 @@ exports.generateToken = (user) => {
         { expiresIn: '24h' }
     );
 };
+
+// Initialize Default User (For Demo/Ephemeral Env)
+exports.initializeDefaultUser = async () => {
+    try {
+        const users = exports.getUsers();
+        const adminEmail = 'admin@nexusdash.com';
+
+        if (!users.find(u => u.email === adminEmail)) {
+            console.log('[Auth] Seeding default admin user...');
+            await exports.createUser(adminEmail, 'admin123', 'admin');
+            console.log('[Auth] Default admin created: admin@nexusdash.com / admin123');
+        }
+    } catch (err) {
+        console.error('[Auth] Failed to seed default user:', err);
+    }
+};
