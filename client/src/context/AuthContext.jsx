@@ -12,22 +12,37 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (token) {
-            try {
-                const decoded = jwtDecode(token);
-                // Check expiry
-                if (decoded.exp * 1000 < Date.now()) {
-                    logout();
-                } else {
-                    setUser(decoded);
-                    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        const initAuth = async () => {
+            if (token) {
+                try {
+                    const decoded = jwtDecode(token);
+                    if (decoded.exp * 1000 < Date.now()) {
+                        await performAutoLogin();
+                    } else {
+                        setUser(decoded);
+                        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                    }
+                } catch (e) {
+                    await performAutoLogin();
                 }
-            } catch (e) {
-                logout();
+            } else {
+                await performAutoLogin();
             }
-        }
-        setLoading(false);
+            setLoading(false);
+        };
+        initAuth();
     }, [token]);
+
+    const performAutoLogin = async () => {
+        try {
+            console.log("Auto-logging in as default admin...");
+            // Use the default admin credentials we seeded in server
+            await login('admin@nexusdash.com', 'admin123');
+        } catch (err) {
+            console.error("Auto-login failed:", err);
+            setLoading(false);
+        }
+    };
 
     const login = async (email, password) => {
         try {

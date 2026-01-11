@@ -21,7 +21,8 @@ function App() {
         <DataProvider>
           <BrowserRouter>
             <Routes>
-              <Route path="/login" element={<Login />} />
+              {/* Login removed for auto-auth demo mode */}
+              {/* <Route path="/login" element={<Login />} /> */}
 
               <Route element={<ProtectedRoute />}>
                 <Route path="/" element={<Layout />}>
