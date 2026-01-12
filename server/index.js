@@ -50,7 +50,26 @@ app.use(express.static(path.join(__dirname, '../client/dist')));
 // Handle React routing, return all requests to React app
 // Handle React routing, return all requests to React app
 app.get(/(.*)/, (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
+    const indexPath = path.join(__dirname, '../client/dist', 'index.html');
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        console.error(`Frontend build not found at: ${indexPath}`);
+        res.status(500).send(`
+            <html>
+                <body style="font-family: sans-serif; text-align: center; padding: 50px;">
+                    <h1 style="color: #e11d48;">Deployment Error: Frontend Not Found</h1>
+                    <p>The backend is running, but the frontend build files are missing.</p>
+                    <p><strong>Debugging Tips for Render:</strong></p>
+                    <ul style="text-align: left; display: inline-block;">
+                        <li>Ensure your <strong>Build Command</strong> is set to: <code>npm run build</code></li>
+                        <li>Check if the build logs show "vite build" output.</li>
+                        <li>path looked for: ${indexPath}</li>
+                    </ul>
+                </body>
+            </html>
+        `);
+    }
 });
 
 app.listen(PORT, () => {
