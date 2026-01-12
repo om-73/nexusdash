@@ -12,5 +12,12 @@
     "password": "$2a$10$NFU.Fi.HAWvSZ5QgAQ7aM.n8gF5fEgaG2BRBJwwZjNCW3cPiz0XXW",
     "role": "viewer",
     "createdAt": "2026-01-11T15:47:07.092Z"
+  },
+  {
+    "id": "1768191920173",
+    "email": "admin@nexusdash.com",
+    "password": "$2a$10$G4a1563FRsU6Hzi2CT40ReiHXT2wacFHaOCfc8Q0FtSnFmLn/d942",
+    "role": "admin",
+    "createdAt": "2026-01-12T04:25:20.173Z"
   }
 ]
