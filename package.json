@@ -4,7 +4,7 @@
     "description": "Root package for deployment",
     "main": "server/index.js",
     "scripts": {
-        "start": "cd data_engine && pip install -r requirements.txt && uvicorn main:app --port 8000 & node ../server/index.js",
+        "start": "cd data_engine && uvicorn main:app --port 8000 & node ../server/index.js",
         "build": "npm install && cd client && npm install && npm run build"
     },
     "keywords": [],
