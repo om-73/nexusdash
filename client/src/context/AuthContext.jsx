@@ -81,6 +81,15 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const register = async (email, password) => {
+        try {
+            await api.post('/auth/register', { email, password });
+            return true;
+        } catch (error) {
+            throw error;
+        }
+    };
+
     // ... login/register/logout methods ...
 
     if (loading) {
