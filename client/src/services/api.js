@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://nexusdash-1.onrender.com/api' : 'http://127.0.0.1:5001/api');
+// reliable runtime check for Vercel
+const isVercel = window.location.hostname.includes('vercel.app');
+const PROD_URL = 'https://nexusdash-1.onrender.com/api';
+const API_URL = isVercel ? PROD_URL : (import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001/api');
 
 export const api = axios.create({
     baseURL: API_URL,
