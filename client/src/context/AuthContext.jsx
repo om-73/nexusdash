@@ -9,7 +9,7 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [token, setToken] = useState(localStorage.getItem('token'));
-    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         const initAuth = async () => {
@@ -36,51 +36,44 @@ export const AuthProvider = ({ children }) => {
     const performAutoLogin = async () => {
         try {
             console.log("Auto-logging in as default admin...");
-            // Use the default admin credentials we seeded in server
             await login('admin@nexusdash.com', 'admin123');
+            setError(null);
         } catch (err) {
             console.error("Auto-login failed:", err);
+            setError("Failed to connect to the server. Please check your internet connection or try again later.");
             setLoading(false);
         }
     };
 
-    const login = async (email, password) => {
-        try {
-            // Because api points to /api header, we need to go to /auth/login
-            // Wait, api base is /api. So /auth/login becomes /api/auth/login. Correct.
-            const res = await api.post('/auth/login', { email, password });
-            const { token, user } = res.data;
+    // ... login/register/logout methods ...
 
-            localStorage.setItem('token', token);
-            setToken(token);
-            setUser(user);
-            api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-            return true;
-        } catch (error) {
-            console.error(error);
-            throw error;
-        }
-    };
+    if (loading) {
+        return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">Loading...</div>;
+    }
 
-    const register = async (email, password) => {
-        try {
-            await api.post('/auth/register', { email, password });
-            return true;
-        } catch (error) {
-            throw error;
-        }
-    };
-
-    const logout = () => {
-        localStorage.removeItem('token');
-        setToken(null);
-        setUser(null);
-        delete api.defaults.headers.common['Authorization'];
-    };
+    if (error && !user) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4">
+                <div className="bg-white p-8 rounded-xl shadow-lg max-w-md w-full text-center">
+                    <h2 className="text-xl font-bold text-red-600 mb-2">Connection Failed</h2>
+                    <p className="text-slate-600 mb-6">{error}</p>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                    >
+                        Retry Connection
+                    </button>
+                    <p className="text-xs text-slate-400 mt-4">
+                        Troubleshooting: Ensure backend is running and you have set VITE_API_URL in Vercel.
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <AuthContext.Provider value={{ user, login, register, logout, loading, isAuthenticated: !!user }}>
-            {!loading && children}
+            {children}
         </AuthContext.Provider>
     );
 };
