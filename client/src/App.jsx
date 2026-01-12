@@ -12,7 +12,6 @@ import DataClean from './pages/DataClean';
 import EDA from './pages/EDA';
 import Model from './pages/Model';
 import CustomDashboard from './pages/CustomDashboard';
-import CustomDashboard from './pages/CustomDashboard';
 
 function App() {
   return (
@@ -21,9 +20,6 @@ function App() {
         <DataProvider>
           <BrowserRouter>
             <Routes>
-              {/* Login removed for auto-auth demo mode */}
-              {/* <Route path="/login" element={<Login />} /> */}
-
               <Route element={<ProtectedRoute />}>
                 <Route path="/" element={<Layout />}>
                   <Route index element={<Dashboard />} />
