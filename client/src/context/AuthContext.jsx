@@ -51,6 +51,24 @@ export const AuthProvider = ({ children }) => {
         initAuth();
     }, [token]);
 
+    const login = async (email, password) => {
+        try {
+            // Because api points to /api header, we need to go to /auth/login
+            // Wait, api base is /api. So /auth/login becomes /api/auth/login. Correct.
+            const res = await api.post('/auth/login', { email, password });
+            const { token, user } = res.data;
+
+            localStorage.setItem('token', token);
+            setToken(token);
+            setUser(user);
+            api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            return true;
+        } catch (error) {
+            console.error(error);
+            throw error;
+        }
+    };
+
     const performAutoLogin = async () => {
         try {
             console.log("Auto-logging in as default admin...");
