@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { jwtDecode } from 'jwt-decode';
+// Removing external dependency to prevent potential import crashes
+// import { jwtDecode } from 'jwt-decode';
 
 const AuthContext = createContext();
 
@@ -11,16 +12,32 @@ export const AuthProvider = ({ children }) => {
     const [token, setToken] = useState(localStorage.getItem('token'));
     const [error, setError] = useState(null);
 
+    // Helper to decode JWT manually
+    const parseJwt = (token) => {
+        try {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function (c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+            return JSON.parse(jsonPayload);
+        } catch (e) {
+            return null;
+        }
+    };
+
     useEffect(() => {
         const initAuth = async () => {
             if (token) {
                 try {
-                    const decoded = jwtDecode(token);
-                    if (decoded.exp * 1000 < Date.now()) {
+                    const decoded = parseJwt(token);
+                    if (decoded && decoded.exp * 1000 < Date.now()) {
                         await performAutoLogin();
-                    } else {
+                    } else if (decoded) {
                         setUser(decoded);
                         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                    } else {
+                        await performAutoLogin();
                     }
                 } catch (e) {
                     await performAutoLogin();
