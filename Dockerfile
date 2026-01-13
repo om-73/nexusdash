@@ -49,6 +49,9 @@ RUN npm run build
 # Go back to root
 WORKDIR /app
 
+# Ensure uploads directory exists and is writable
+RUN mkdir -p server/uploads && chmod 777 server/uploads
+
 # Expose ports (Render only listens on one, usually PORT env var, but we expose internal 8000 too)
 EXPOSE 5001
 EXPOSE 8000

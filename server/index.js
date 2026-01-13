@@ -54,11 +54,23 @@ app.get('/api/health', async (req, res) => {
             python_url: pythonUrl
         });
     } catch (error) {
+        // Read the python log file to see why it crashed
+        let logs = "No logs found";
+        const logPath = path.join(__dirname, '../python.log');
+        if (fs.existsSync(logPath)) {
+            try {
+                // Read last 2000 chars roughly
+                const Data = fs.readFileSync(logPath, 'utf8');
+                logs = Data.slice(-2000);
+            } catch (e) { logs = "Error reading logs: " + e.message; }
+        }
+
         res.status(503).json({
             status: 'degraded',
             server: 'online',
             python: 'disconnected',
-            details: error.message
+            details: error.message,
+            recent_logs: logs
         });
     }
 });
