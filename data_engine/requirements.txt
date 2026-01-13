@@ -10,5 +10,5 @@ requests
 sqlalchemy
 pymongo
 psycopg2-binary
-# snowflake-connector-python
-# google-cloud-bigquery
+pyarrow
+openpyxl
