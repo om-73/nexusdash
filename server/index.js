@@ -41,7 +41,39 @@ app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/upload', require('./routes/uploadRoutes'));
 app.use('/api/data', require('./routes/dataRoutes'));
 
-// Health Check (Infrastructure Debugging)
+const { spawn } = require('child_process');
+
+// Logs buffer
+let recentLogs = "Initializing...";
+
+// Start Python Engine Programmatically
+const pythonCwd = path.join(__dirname, '../data_engine');
+const pythonProcess = spawn('python', ['-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '8000'], {
+    cwd: pythonCwd,
+    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+});
+
+pythonProcess.stdout.on('data', (data) => {
+    const chunk = data.toString();
+    console.log('[Python]', chunk);
+    recentLogs += chunk;
+    if (recentLogs.length > 5000) recentLogs = recentLogs.slice(-5000);
+});
+
+pythonProcess.stderr.on('data', (data) => {
+    const chunk = data.toString();
+    console.error('[Python ERR]', chunk);
+    recentLogs += chunk;
+    if (recentLogs.length > 5000) recentLogs = recentLogs.slice(-5000);
+});
+
+pythonProcess.on('close', (code) => {
+    const msg = `\n[FATAL] Python process exited with code ${code}`;
+    console.error(msg);
+    recentLogs += msg;
+});
+
+// Logs API
 app.get('/api/health', async (req, res) => {
     try {
         const pythonUrl = process.env.PYTHON_ENGINE_URL || 'http://localhost:8000';
@@ -54,23 +86,12 @@ app.get('/api/health', async (req, res) => {
             python_url: pythonUrl
         });
     } catch (error) {
-        // Read the python log file to see why it crashed
-        let logs = "No logs found";
-        const logPath = path.join(__dirname, 'uploads/python.log');
-        if (fs.existsSync(logPath)) {
-            try {
-                // Read last 2000 chars roughly
-                const Data = fs.readFileSync(logPath, 'utf8');
-                logs = Data.slice(-2000);
-            } catch (e) { logs = "Error reading logs: " + e.message; }
-        }
-
         res.status(200).json({
             status: 'degraded',
             server: 'online',
             python: 'disconnected',
             details: error.message,
-            recent_logs: logs
+            recent_logs: recentLogs
         });
     }
 });
