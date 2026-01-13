@@ -44,6 +44,7 @@ COPY . .
 
 # Build Frontend
 WORKDIR /app/client
+RUN npm install
 RUN npm run build
 
 # Go back to root
