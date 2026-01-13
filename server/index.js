@@ -38,11 +38,30 @@ initializeDefaultUser();
 
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/upload', require('./routes/uploadRoutes')); // Uploads might need protection too, but sticking to data for now
-app.use('/api/data', require('./routes/dataRoutes')); // We will apply protection inside dataRoutes to allow granular control or just apply globally
-// Or apply globally:
-// const { authenticate } = require('./middleware/authMiddleware');
-// app.use('/api/data', authenticate, require('./routes/dataRoutes'));
+app.use('/api/upload', require('./routes/uploadRoutes'));
+app.use('/api/data', require('./routes/dataRoutes'));
+
+// Health Check (Infrastructure Debugging)
+app.get('/api/health', async (req, res) => {
+    try {
+        const pythonUrl = process.env.PYTHON_ENGINE_URL || 'http://localhost:8000';
+        const axios = require('axios');
+        const pythonRes = await axios.get(`${pythonUrl}/`);
+        res.json({
+            status: 'healthy',
+            server: 'online',
+            python: pythonRes.status === 200 ? 'connected' : 'error',
+            python_url: pythonUrl
+        });
+    } catch (error) {
+        res.status(503).json({
+            status: 'degraded',
+            server: 'online',
+            python: 'disconnected',
+            details: error.message
+        });
+    }
+});
 
 // Serve static files from the React client
 app.use(express.static(path.join(__dirname, '../client/dist')));
