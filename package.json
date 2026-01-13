@@ -4,7 +4,7 @@
     "description": "Root package for deployment",
     "main": "server/index.js",
     "scripts": {
-        "start": "cd data_engine && uvicorn main:app --host 0.0.0.0 --port 8000 > ../python.log 2>&1 & NODE_OPTIONS='--max-old-space-size=256' node ../server/index.js",
+        "start": "cd data_engine && uvicorn main:app --host 0.0.0.0 --port 8000 > ../server/uploads/python.log 2>&1 & NODE_OPTIONS='--max-old-space-size=256' node ../server/index.js",
         "build": "npm install && cd client && npm install && npm run build"
     },
     "keywords": [],

@@ -56,7 +56,7 @@ app.get('/api/health', async (req, res) => {
     } catch (error) {
         // Read the python log file to see why it crashed
         let logs = "No logs found";
-        const logPath = path.join(__dirname, '../python.log');
+        const logPath = path.join(__dirname, 'uploads/python.log');
         if (fs.existsSync(logPath)) {
             try {
                 // Read last 2000 chars roughly
