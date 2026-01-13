@@ -25,7 +25,10 @@ exports.processUpload = async (req, res) => {
             console.error('Data Engine Response:', JSON.stringify(error.response.data, null, 2));
             return res.status(error.response.status).json(error.response.data);
         }
-        res.status(500).json({ error: 'Failed to process data', details: error.message });
+        res.status(500).json({
+            error: 'Failed to process data',
+            details: error.code === 'ECONNREFUSED' ? 'Python Data Engine not reachable' : error.message
+        });
     }
 };
 

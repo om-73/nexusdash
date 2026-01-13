@@ -5,6 +5,8 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y \
     curl \
     build-essential \
+    libgomp1 \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js (Version 20.x)
