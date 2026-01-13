@@ -15,17 +15,10 @@ from dotenv import load_dotenv
 load_dotenv() # Load environment variables from .env
 
 # ML Imports
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge, Lasso
-from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier, GradientBoostingRegressor, GradientBoostingClassifier, AdaBoostRegressor, AdaBoostClassifier
-from sklearn.svm import SVR, SVC
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.naive_bayes import GaussianNB
-from sklearn.cluster import KMeans
-from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, f1_score
-from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler
-from sklearn.feature_extraction.text import CountVectorizer
+# ML Imports (Lazy loaded in functions to save memory)
+# from sklearn.model_selection import train_test_split
+# from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge, Lasso
+# ... (Moved to train_model)
 
 # NLP / Query
 # NLP / Query
@@ -365,7 +358,8 @@ def clean_data(request: CleanRequest):
         elif request.operation == "encode_columns":
             if request.columns:
                 for col in request.columns:
-                    if request.strategy == "label":
+            elif request.strategy == "label":
+                        from sklearn.preprocessing import LabelEncoder
                         le = LabelEncoder()
                         df[col] = le.fit_transform(df[col].astype(str))
                     elif request.strategy == "onehot":
@@ -373,6 +367,7 @@ def clean_data(request: CleanRequest):
 
         elif request.operation == "normalize":
             if request.columns:
+                from sklearn.preprocessing import MinMaxScaler, StandardScaler
                 scaler = None
                 if request.strategy == "minmax": scaler = MinMaxScaler()
                 elif request.strategy == "standard": scaler = StandardScaler()
@@ -557,6 +552,9 @@ def analyze_drivers(request: DriversRequest):
             elif len(y.unique()) > 20:
                 is_regression = True
                 
+        # Lazy Import for analyzing drivers
+        from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+
         # Fit Model
         importances = []
         if is_regression:
@@ -594,6 +592,18 @@ def train_model(request: TrainRequest):
     try:
         df = active_df.copy()
         
+        # Lazy Imports for Training
+        from sklearn.preprocessing import LabelEncoder
+        from sklearn.model_selection import train_test_split
+        from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge, Lasso
+        from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
+        from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier, GradientBoostingRegressor, GradientBoostingClassifier, AdaBoostRegressor, AdaBoostClassifier
+        from sklearn.svm import SVR, SVC
+        from sklearn.neighbors import KNeighborsClassifier
+        from sklearn.naive_bayes import GaussianNB
+        from sklearn.cluster import KMeans
+        from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, f1_score
+
         # Preprocessing: Drop NaNs in selected columns
         # Ensure we don't have duplicate columns in the dataframe itself
         df = df.loc[:, ~df.columns.duplicated()]
