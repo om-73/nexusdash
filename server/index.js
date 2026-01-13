@@ -65,7 +65,7 @@ app.get('/api/health', async (req, res) => {
             } catch (e) { logs = "Error reading logs: " + e.message; }
         }
 
-        res.status(503).json({
+        res.status(200).json({
             status: 'degraded',
             server: 'online',
             python: 'disconnected',
