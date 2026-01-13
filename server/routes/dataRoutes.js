@@ -12,25 +12,18 @@ router.get('/state', dataController.getState);
 router.post('/clean', auditLogger('Clean Data'), dataController.cleanData);
 router.get('/eda', dataController.getEDA);
 router.post('/train', auditLogger('Train Model'), dataController.trainModel);
-router.post('/train', dataController.trainModel);
 router.get('/export', dataController.exportData);
 router.post('/connect', auditLogger('Connect DB'), dataController.connectDatabase);
-router.post('/undo', dataController.undoAction);
 router.post('/undo', dataController.undoAction);
 router.post('/redo', dataController.redoAction);
 router.get('/quality', dataController.getDataQuality);
 router.get('/pipeline', dataController.getPipeline);
 router.get('/eda-summary', dataController.getEDASummary);
 router.get('/recommend', dataController.getChartRecommendations);
-router.get('/recommend', dataController.getChartRecommendations);
 router.post('/query', dataController.queryMachineLearning);
 router.get('/kpi', dataController.getKPIs);
-router.get('/model/download', dataController.downloadModel); // Ensure path matches frontend api call
+router.get('/model/download', dataController.downloadModel);
 
-// Observability & Contracts
-router.post('/register', dataController.registerDataset);
-router.get('/health/:id', dataController.checkHealth);
-router.post('/contracts', dataController.saveContract);
 // Observability & Contracts
 router.post('/register', dataController.registerDataset);
 router.get('/health/:id', dataController.checkHealth);
