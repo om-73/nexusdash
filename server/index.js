@@ -48,7 +48,8 @@ let recentLogs = "Initializing...";
 
 // Start Python Engine Programmatically
 const pythonCwd = path.join(__dirname, '../data_engine');
-const pythonProcess = spawn('python', ['-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '8000'], {
+// Use 'python3' to avoid /usr/bin/python vs /usr/local/bin/python confusion
+const pythonProcess = spawn('python3', ['-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '8000'], {
     cwd: pythonCwd,
     env: { ...process.env, PYTHONUNBUFFERED: '1' }
 });
@@ -86,12 +87,32 @@ app.get('/api/health', async (req, res) => {
             python_url: pythonUrl
         });
     } catch (error) {
+        // Debug Frontend Path
+        const clientDir = path.join(__dirname, '../client');
+        let clientFiles = [];
+        try {
+            if (fs.existsSync(clientDir)) {
+                clientFiles = fs.readdirSync(clientDir);
+                const distPath = path.join(clientDir, 'dist');
+                if (fs.existsSync(distPath)) {
+                    clientFiles.push('dist_contents: ' + fs.readdirSync(distPath).join(', '));
+                } else {
+                    clientFiles.push('NO DIST FOLDER');
+                }
+            } else {
+                clientFiles.push('NO CLIENT FOLDER');
+            }
+        } catch (e) {
+            clientFiles.push('Error reading client dir: ' + e.message);
+        }
+
         res.status(200).json({
             status: 'degraded',
             server: 'online',
             python: 'disconnected',
             details: error.message,
-            recent_logs: recentLogs
+            recent_logs: recentLogs,
+            client_debug: clientFiles
         });
     }
 });
