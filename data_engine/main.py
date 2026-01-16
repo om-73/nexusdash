@@ -358,7 +358,7 @@ def clean_data(request: CleanRequest):
         elif request.operation == "encode_columns":
             if request.columns:
                 for col in request.columns:
-            elif request.strategy == "label":
+                    if request.strategy == "label":
                         from sklearn.preprocessing import LabelEncoder
                         le = LabelEncoder()
                         df[col] = le.fit_transform(df[col].astype(str))
