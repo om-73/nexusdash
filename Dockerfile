@@ -45,9 +45,8 @@ COPY . .
 # Build Frontend
 WORKDIR /app/client
 RUN npm install
-# Build Frontend
-WORKDIR /app/client
-RUN npm install
+# Increase memory for build
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build
 # Verify build output exists (Fail build if missing)
 RUN ls -la dist
