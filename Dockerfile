@@ -45,7 +45,12 @@ COPY . .
 # Build Frontend
 WORKDIR /app/client
 RUN npm install
+# Build Frontend
+WORKDIR /app/client
+RUN npm install
 RUN npm run build
+# Verify build output exists (Fail build if missing)
+RUN ls -la dist
 
 # Go back to root
 WORKDIR /app

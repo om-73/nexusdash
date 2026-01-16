@@ -48,8 +48,8 @@ let recentLogs = "Initializing...";
 
 // Start Python Engine Programmatically
 const pythonCwd = path.join(__dirname, '../data_engine');
-// Use 'python3' to avoid /usr/bin/python vs /usr/local/bin/python confusion
-const pythonProcess = spawn('python3', ['-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '8000'], {
+// Use absolute path to Docker's main Python (where pip packages are)
+const pythonProcess = spawn('/usr/local/bin/python', ['-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '8000'], {
     cwd: pythonCwd,
     env: { ...process.env, PYTHONUNBUFFERED: '1' }
 });
