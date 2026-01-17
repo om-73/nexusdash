@@ -21,41 +21,59 @@ const upload = multer({
     storage: storage,
     limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
     fileFilter: (req, file, cb) => {
-        const filetypes = /csv|xlsx|xls/; // Allowed extensions
-        const mimetype = filetypes.test(file.mimetype);
-        const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-
-        if (mimetype && extname) {
+        const ext = path.extname(file.originalname).toLowerCase();
+        const mimeType = file.mimetype;
+        
+        console.log('[Debug] File upload validation - Name:', file.originalname, 'MIME:', mimeType);
+        
+        // Accept common CSV/Excel MIME types
+        const acceptedMimes = [
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'text/csv',
+            'application/csv',
+            'text/plain' // Some systems send CSV as text/plain
+        ];
+        
+        const acceptedExtensions = ['.csv', '.xlsx', '.xls'];
+        
+        if (acceptedExtensions.includes(ext) && acceptedMimes.includes(mimeType)) {
+            console.log('[Info] File accepted based on MIME and extension');
             return cb(null, true);
         }
-        // Accept common CSV/Excel mimes
-        if (file.mimetype === 'application/vnd.ms-excel' ||
-            file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-            file.mimetype === 'text/csv' ||
-            file.mimetype === 'application/csv') {
+        
+        // Fallback: accept based on extension alone for CSV
+        if (ext === '.csv') {
+            console.log('[Info] File accepted based on .csv extension');
             return cb(null, true);
         }
 
-        cb(new Error('Error: File upload only supports CSV and Excel files!'));
+        const error = `File type not supported. Accepted: CSV, XLSX, XLS. Got: ${ext} (${mimeType})`;
+        console.error('[Error]', error);
+        cb(new Error(error));
     }
 }).single('file'); // 'file' is the key name
 
 exports.uploadFile = (req, res) => {
     upload(req, res, (err) => {
         if (err) {
+            console.error('[Error] Upload validation failed:', err.message);
             return res.status(400).json({ error: err.message });
         }
         if (!req.file) {
+            console.error('[Error] No file provided in request');
             return res.status(400).json({ error: 'Please select a file to upload' });
         }
 
         // Return file info
-        res.json({
+        const responseData = {
             message: 'File uploaded successfully',
             filePath: req.file.path,
             filename: req.file.filename,
             originalName: req.file.originalname,
             size: req.file.size
-        });
+        };
+        console.log('[Debug] Upload Success:', responseData);
+        res.json(responseData);
     });
-};
+};;

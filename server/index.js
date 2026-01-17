@@ -41,6 +41,9 @@ app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/upload', require('./routes/uploadRoutes'));
 app.use('/api/data', require('./routes/dataRoutes'));
 
+// python process management removed to avoid conflict with start-dev.sh
+// The Python engine is started separately (e.g. by start-dev.sh or Docker)
+/*
 const { spawn } = require('child_process');
 
 // Logs buffer
@@ -73,6 +76,7 @@ pythonProcess.on('close', (code) => {
     console.error(msg);
     recentLogs += msg;
 });
+*/
 
 // Logs API
 app.get('/api/health', async (req, res) => {
@@ -114,6 +118,60 @@ app.get('/api/health', async (req, res) => {
             recent_logs: recentLogs,
             client_debug: clientFiles
         });
+    }
+});
+
+// Manual Cleanup Endpoint
+app.post('/api/cleanup', async (req, res) => {
+    try {
+        console.log('[Manual Cleanup] Cleanup requested via API');
+        const uploadDirPath = path.join(__dirname, 'uploads');
+        
+        fs.readdir(uploadDirPath, async (err, files) => {
+            if (err) {
+                return res.status(500).json({ error: 'Failed to read upload directory' });
+            }
+
+            const now = Date.now();
+            const FILE_RETENTION_TIME = process.env.FILE_RETENTION_HOURS ? 
+                (parseInt(process.env.FILE_RETENTION_HOURS) * 60 * 60 * 1000) : 
+                (24 * 60 * 60 * 1000);
+
+            let deletedFiles = [];
+            let totalSize = 0;
+
+            files.forEach(file => {
+                if (file === '.gitkeep') return;
+
+                const filePath = path.join(uploadDirPath, file);
+                fs.stat(filePath, (err, stats) => {
+                    if (err) return;
+
+                    const age = now - stats.mtimeMs;
+                    if (age > FILE_RETENTION_TIME) {
+                        fs.unlink(filePath, (err) => {
+                            if (!err) {
+                                console.log(`[Manual Cleanup] Deleted: ${file}`);
+                                deletedFiles.push(file);
+                                totalSize += stats.size;
+                            }
+                        });
+                    }
+                });
+            });
+
+            // Send response after processing
+            setTimeout(() => {
+                res.json({
+                    message: 'Cleanup completed',
+                    deletedCount: deletedFiles.length,
+                    deletedFiles: deletedFiles,
+                    freedSpaceMB: (totalSize / (1024 * 1024)).toFixed(2)
+                });
+            }, 500);
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 

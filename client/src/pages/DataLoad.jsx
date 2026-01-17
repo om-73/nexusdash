@@ -49,10 +49,14 @@ export default function DataLoad() {
         setError(null);
         try {
             // 1. Upload File
+            console.log('[DataLoad] Starting file upload:', file.name);
             const uploadRes = await uploadFile(file);
+            console.log('[DataLoad] Upload successful:', uploadRes);
 
             // 2. Load Data Preview
+            console.log('[DataLoad] Loading data from path:', uploadRes.filePath);
             const dataRes = await loadData(uploadRes.filePath, 'csv'); // Assume CSV for now
+            console.log('[DataLoad] Data loaded successfully:', dataRes);
 
             setDataSummary(dataRes);
             setDataPreview(dataRes.preview);
@@ -60,9 +64,14 @@ export default function DataLoad() {
             navigate('/');
             addToast('File uploaded successfully', 'success');
         } catch (err) {
-            console.error(err);
-            setError(err.response?.data?.message || err.message || 'Failed to upload/load file');
-            addToast('Failed to upload file', 'error');
+            console.error('[DataLoad] Error:', err);
+            const errorMsg = err.response?.data?.message || 
+                           err.response?.data?.error || 
+                           err.response?.data?.detail ||
+                           err.message || 
+                           'Failed to upload/load file';
+            setError(errorMsg);
+            addToast(`Failed to upload file: ${errorMsg}`, 'error');
         } finally {
             setLoading(false);
         }

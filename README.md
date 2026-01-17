@@ -5,7 +5,7 @@ A comprehensive data intelligence platform designed for modern enterprises. Seam
 ## 🚀 Key Features
 
 ### 1. Data Connectivity & Management
-- **Universal Connectors**: Upload CSV/Excel or connect to **Snowflake, BigQuery, Redshift, PostgreSQL, and MongoDB**.
+- **Universal Connectors**: Upload CSV/Excel (with robust encoding support for UTF-8, Latin1, CP1252) or connect to **Snowflake, BigQuery, Redshift, PostgreSQL, and MongoDB**.
 - **Data Contracts**: Define and enforce JSON-based schema validation on ingestion.
 - **Observability**: Automatic freshness checks, volume anomaly detection, and schema change alerts.
 - **PII Protection**: Auto-detection and masking of sensitive info (Emails, SSNs, Credit Cards).
@@ -22,7 +22,7 @@ A comprehensive data intelligence platform designed for modern enterprises. Seam
 - **Natural Language Query**: Ask questions like "Show customers from NY with spend > 500" in plain English.
 
 ### 4. Machine Learning Studio
-- **AutoML**: Compare multiple algorithms (Random Forest, Gradient Boosting, SVM, etc.) with one click.
+- **AutoML**: Select multiple algorithms simultaneously (e.g. Linear + Random Forest) to compare performance metrics (R2, RMSE, Accuracy) side-by-side.
 - **Model Training**: Train Regression, Classification, or Clustering models.
 - **Model Export**: Download the best-performing model as a `.pkl` file for production deployment.
 - **Feature Store**: Centralized repository for managing and sharing ML features.
@@ -57,7 +57,7 @@ A comprehensive data intelligence platform designed for modern enterprises. Seam
     ./start-dev.sh
     ```
     This will launch:
-    - Frontend: `http://localhost:3000`
+    - Frontend: `http://localhost:5173`
     - Backend: `http://localhost:5001`
     - Data Engine: `http://localhost:8000`
 

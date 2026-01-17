@@ -2,12 +2,30 @@ import axios from 'axios';
 
 // reliable runtime check for Vercel
 const isVercel = window.location.hostname.includes('vercel.app');
-const PROD_URL = 'https://nexusdash-4.onrender.com/api';
+const PROD_URL = 'https://nexusdash-2.onrender.com/api';
 const API_URL = isVercel ? PROD_URL : (import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '/api' : 'http://127.0.0.1:5001/api'));
 
 export const api = axios.create({
     baseURL: API_URL,
 });
+
+// Request interceptor to log requests
+api.interceptors.request.use(request => {
+    console.log('[API Request]', request.method.toUpperCase(), request.url);
+    if (request.data && !(request.data instanceof FormData)) {
+        console.log('[Request Data]', request.data);
+    }
+    return request;
+}, error => Promise.reject(error));
+
+// Response interceptor to log errors
+api.interceptors.response.use(
+    response => response,
+    error => {
+        console.error('[API Error]', error.response?.status, error.response?.statusText, error.response?.data);
+        return Promise.reject(error);
+    }
+);
 
 export const uploadFile = async (file) => {
     const formData = new FormData();
@@ -23,8 +41,8 @@ export const uploadFile = async (file) => {
 
 export const loadData = async (filePath, fileType = 'csv') => {
     const response = await api.post('/data/load', {
-        filePath,
-        fileType
+        file_path: filePath,
+        file_type: fileType
     });
     return response.data;
 };

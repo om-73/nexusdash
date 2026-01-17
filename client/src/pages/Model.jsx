@@ -10,7 +10,7 @@ export default function Model() {
         problem_type: 'regression',
         target_column: '',
         feature_columns: [],
-        algorithm: 'linear'
+        algorithms: ['linear']
     });
     const [results, setResults] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -139,7 +139,11 @@ export default function Model() {
                         <select
                             className="w-full p-2 border border-slate-300 rounded-lg"
                             value={config.problem_type}
-                            onChange={(e) => setConfig({ ...config, problem_type: e.target.value, algorithm: e.target.value === 'regression' ? 'linear' : 'logistic' })}
+                            onChange={(e) => setConfig({
+                                ...config,
+                                problem_type: e.target.value,
+                                algorithms: e.target.value === 'regression' ? ['linear'] : ['logistic']
+                            })}
                         >
                             <option value="regression">Regression (Predict Number)</option>
                             <option value="classification">Classification (Predict Category)</option>
@@ -147,49 +151,154 @@ export default function Model() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Algorithm</label>
-                        <select
-                            className="w-full p-2 border border-slate-300 rounded-lg"
-                            value={config.algorithm}
-                            onChange={(e) => setConfig({ ...config, algorithm: e.target.value })}
-                        >
-                            <option value="all">⚡ Compare All Models (AutoML)</option>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Algorithms (Select Multiple)</label>
+                        <div className="border border-slate-300 rounded-lg p-3 max-h-60 overflow-y-auto bg-white space-y-4">
                             {config.problem_type === 'regression' ? (
                                 <>
-                                    <optgroup label="Linear Models">
-                                        <option value="linear">Linear Regression</option>
-                                        <option value="ridge">Ridge Regression (L2)</option>
-                                        <option value="lasso">Lasso Regression (L1)</option>
-                                    </optgroup>
-                                    <optgroup label="Tree Based">
-                                        <option value="dt">Decision Tree</option>
-                                        <option value="rf">Random Forest</option>
-                                        <option value="gbr">Gradient Boosting</option>
-                                        <option value="ada">AdaBoost</option>
-                                    </optgroup>
-                                    <optgroup label="Other">
-                                        <option value="svr">Support Vector Regression (SVR)</option>
-                                    </optgroup>
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-400 uppercase mb-1">Linear Models</p>
+                                        <div className="space-y-1">
+                                            {['linear', 'ridge', 'lasso'].map(algo => (
+                                                <label key={algo} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={config.algorithms.includes(algo)}
+                                                        onChange={() => {
+                                                            const current = config.algorithms;
+                                                            if (current.includes(algo)) setConfig({ ...config, algorithms: current.filter(a => a !== algo) });
+                                                            else setConfig({ ...config, algorithms: [...current, algo] });
+                                                        }}
+                                                        className="rounded text-primary focus:ring-primary"
+                                                    />
+                                                    <span className="text-sm">
+                                                        {algo === 'linear' && 'Linear Regression'}
+                                                        {algo === 'ridge' && 'Ridge Regression (L2)'}
+                                                        {algo === 'lasso' && 'Lasso Regression (L1)'}
+                                                    </span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-400 uppercase mb-1">Tree Based</p>
+                                        <div className="space-y-1">
+                                            {['dt', 'rf', 'gbr', 'ada'].map(algo => (
+                                                <label key={algo} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={config.algorithms.includes(algo)}
+                                                        onChange={() => {
+                                                            const current = config.algorithms;
+                                                            if (current.includes(algo)) setConfig({ ...config, algorithms: current.filter(a => a !== algo) });
+                                                            else setConfig({ ...config, algorithms: [...current, algo] });
+                                                        }}
+                                                        className="rounded text-primary focus:ring-primary"
+                                                    />
+                                                    <span className="text-sm">
+                                                        {algo === 'dt' && 'Decision Tree'}
+                                                        {algo === 'rf' && 'Random Forest'}
+                                                        {algo === 'gbr' && 'Gradient Boosting'}
+                                                        {algo === 'ada' && 'AdaBoost'}
+                                                    </span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-400 uppercase mb-1">Other</p>
+                                        <div className="space-y-1">
+                                            <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={config.algorithms.includes('svr')}
+                                                    onChange={() => {
+                                                        const current = config.algorithms;
+                                                        if (current.includes('svr')) setConfig({ ...config, algorithms: current.filter(a => a !== 'svr') });
+                                                        else setConfig({ ...config, algorithms: [...current, 'svr'] });
+                                                    }}
+                                                    className="rounded text-primary focus:ring-primary"
+                                                />
+                                                <span className="text-sm">Support Vector Regression (SVR)</span>
+                                            </label>
+                                        </div>
+                                    </div>
                                 </>
                             ) : (
                                 <>
-                                    <optgroup label="Linear/Probabilistic">
-                                        <option value="logistic">Logistic Regression</option>
-                                        <option value="nb">Naive Bayes (Gaussian)</option>
-                                    </optgroup>
-                                    <optgroup label="Tree Based">
-                                        <option value="dt">Decision Tree</option>
-                                        <option value="rf">Random Forest</option>
-                                        <option value="gbc">Gradient Boosting</option>
-                                        <option value="ada">AdaBoost</option>
-                                    </optgroup>
-                                    <optgroup label="Distance/Margin">
-                                        <option value="knn">K-Nearest Neighbors (KNN)</option>
-                                        <option value="svm">Support Vector Machine (SVM)</option>
-                                    </optgroup>
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-400 uppercase mb-1">Linear/Probabilistic</p>
+                                        <div className="space-y-1">
+                                            {['logistic', 'nb'].map(algo => (
+                                                <label key={algo} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={config.algorithms.includes(algo)}
+                                                        onChange={() => {
+                                                            const current = config.algorithms;
+                                                            if (current.includes(algo)) setConfig({ ...config, algorithms: current.filter(a => a !== algo) });
+                                                            else setConfig({ ...config, algorithms: [...current, algo] });
+                                                        }}
+                                                        className="rounded text-primary focus:ring-primary"
+                                                    />
+                                                    <span className="text-sm">
+                                                        {algo === 'logistic' && 'Logistic Regression'}
+                                                        {algo === 'nb' && 'Naive Bayes (Gaussian)'}
+                                                    </span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-400 uppercase mb-1">Tree Based</p>
+                                        <div className="space-y-1">
+                                            {['dt', 'rf', 'gbc', 'ada'].map(algo => (
+                                                <label key={algo} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={config.algorithms.includes(algo)}
+                                                        onChange={() => {
+                                                            const current = config.algorithms;
+                                                            if (current.includes(algo)) setConfig({ ...config, algorithms: current.filter(a => a !== algo) });
+                                                            else setConfig({ ...config, algorithms: [...current, algo] });
+                                                        }}
+                                                        className="rounded text-primary focus:ring-primary"
+                                                    />
+                                                    <span className="text-sm">
+                                                        {algo === 'dt' && 'Decision Tree'}
+                                                        {algo === 'rf' && 'Random Forest'}
+                                                        {algo === 'gbc' && 'Gradient Boosting'}
+                                                        {algo === 'ada' && 'AdaBoost'}
+                                                    </span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-400 uppercase mb-1">Distance/Margin</p>
+                                        <div className="space-y-1">
+                                            {['knn', 'svm'].map(algo => (
+                                                <label key={algo} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={config.algorithms.includes(algo)}
+                                                        onChange={() => {
+                                                            const current = config.algorithms;
+                                                            if (current.includes(algo)) setConfig({ ...config, algorithms: current.filter(a => a !== algo) });
+                                                            else setConfig({ ...config, algorithms: [...current, algo] });
+                                                        }}
+                                                        className="rounded text-primary focus:ring-primary"
+                                                    />
+                                                    <span className="text-sm">
+                                                        {algo === 'knn' && 'K-Nearest Neighbors (KNN)'}
+                                                        {algo === 'svm' && 'Support Vector Machine (SVM)'}
+                                                    </span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </>
                             )}
-                        </select>
+                        </div>
                     </div>
 
                     <div>

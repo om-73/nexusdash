@@ -114,7 +114,7 @@ class CleanRequest(BaseModel):
 
 class TrainRequest(BaseModel):
     problem_type: str # regression, classification, clustering
-    algorithm: str # linear, logistic, dt, rf, kmeans
+    algorithms: List[str] # linear, logistic, dt, rf, kmeans
     target_column: Optional[str] = None
     feature_columns: List[str]
     params: Optional[Dict[str, Any]] = {}
@@ -268,18 +268,48 @@ def load_data(request: FileLoadRequest):
     try:
         if request.file_type == "csv":
             # Auto-detect delimiter using csv.Sniffer (Faster than pandas python engine)
+            sep = ','
             try:
                 import csv
-                with open(request.file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    sample = f.read(1024)
-                    dialect = csv.Sniffer().sniff(sample)
-                    sep = dialect.delimiter
+                # Try reading with utf-8 first, then fallback
+                encodings = ['utf-8', 'latin1', 'cp1252', 'ISO-8859-1']
+                sample = ""
+                for enc in encodings:
+                    try:
+                        with open(request.file_path, 'r', encoding=enc) as f:
+                            sample = f.read(1024)
+                        break
+                    except UnicodeDecodeError:
+                        continue
                 
-                # Use C-engine (default) with detected separator
-                df = pd.read_csv(request.file_path, sep=sep)
+                if not sample:
+                    # Fallback to ignore errors if all fail (unlikely)
+                    with open(request.file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                         sample = f.read(1024)
+
+                dialect = csv.Sniffer().sniff(sample)
+                sep = dialect.delimiter
             except Exception as e:
-                print(f"Sniffer failed, falling back to default: {e}")
-                df = pd.read_csv(request.file_path) # Default pandas inference
+                print(f"Sniffer failed, falling back to default sep: {e}")
+            
+            # Try reading dataframe with multiple encodings
+            try:
+                try:
+                    df = pd.read_csv(request.file_path, sep=sep)
+                except UnicodeDecodeError:
+                    print("UTF-8 read failed, trying latin1")
+                    df = pd.read_csv(request.file_path, sep=sep, encoding='latin1')
+                except Exception:
+                     # If sep caused issue, try default
+                     try:
+                         df = pd.read_csv(request.file_path)
+                     except UnicodeDecodeError:
+                         df = pd.read_csv(request.file_path, encoding='latin1')
+
+            except Exception as e:
+                print(f"All CSV load attempts failed, trying engine='python' with error replacement")
+                # Last resort: python engine with replacement
+                df = pd.read_csv(request.file_path, sep=sep, engine='python', encoding_errors='replace')
         elif request.file_type in ["xlsx", "excel"]:
             df = pd.read_excel(request.file_path)
         else:
@@ -587,55 +617,84 @@ def analyze_drivers(request: DriversRequest):
 
 @app.post("/train")
 def train_model(request: TrainRequest):
+    # Lazy Imports
+    from sklearn.model_selection import train_test_split
+    from sklearn.linear_model import LinearRegression, Ridge, Lasso, LogisticRegression
+    from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
+    from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier, GradientBoostingRegressor, GradientBoostingClassifier, AdaBoostRegressor, AdaBoostClassifier
+    from sklearn.svm import SVR, SVC
+    from sklearn.neighbors import KNeighborsClassifier
+    from sklearn.naive_bayes import GaussianNB
+    from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, f1_score
+    from sklearn.cluster import KMeans
+    from sklearn.metrics import silhouette_score
+    from sklearn.decomposition import PCA
+    from sklearn.preprocessing import LabelEncoder
+    import numpy as np
+    import joblib
+    import os
+
     global active_df
     if active_df is None: raise HTTPException(status_code=400, detail="No data loaded")
+    
     try:
         df = active_df.copy()
         
-        # Lazy Imports for Training
-        from sklearn.preprocessing import LabelEncoder
-        from sklearn.model_selection import train_test_split
-        from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge, Lasso
-        from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
-        from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier, GradientBoostingRegressor, GradientBoostingClassifier, AdaBoostRegressor, AdaBoostClassifier
-        from sklearn.svm import SVR, SVC
-        from sklearn.neighbors import KNeighborsClassifier
-        from sklearn.naive_bayes import GaussianNB
-        from sklearn.cluster import KMeans
-        from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, f1_score
-
-        # Preprocessing: Drop NaNs in selected columns
-        # Ensure we don't have duplicate columns in the dataframe itself
-        df = df.loc[:, ~df.columns.duplicated()]
+        # Validate Target
+        if request.target_column not in df.columns:
+            raise HTTPException(status_code=400, detail=f"Target column {request.target_column} not found")
         
-        cols_to_use = list(set(request.feature_columns + ([request.target_column] if request.target_column else [])))
-        df = df[cols_to_use].dropna()
+        # Prepare Data
+        # Auto-select features if not provided
+        if not request.feature_columns:
+            request.feature_columns = [c for c in df.columns if c != request.target_column]
+            
+        # Handle Missing Values (Simple Drop)
+        df = df.dropna(subset=[request.target_column] + request.feature_columns)
         
-        if df.empty: raise ValueError("Resulting dataset is empty after dropping NaNs")
-
-        # Encode categorical features
-        # Simple approach: Label Encode everything object-like
-        le_dict = {}
+        if df.empty:
+             raise HTTPException(status_code=400, detail="Dataset is empty after dropping missing values")
+             
+        # Encode Features (Simple Label Encoding for Object Types)
         for col in request.feature_columns:
-            if col in df.columns and df[col].dtype == 'object':
-                le = LabelEncoder()
-                df[col] = le.fit_transform(df[col].astype(str))
-                le_dict[col] = le # Store if needed for inference (omitted for MVP)
-
+            if df[col].dtype == 'object':
+                 le = LabelEncoder()
+                 df[col] = le.fit_transform(df[col].astype(str))
+                 
         X = df[request.feature_columns]
         
         if request.problem_type == "clustering":
-            if request.algorithm == "kmeans":
+            algo = request.algorithms[0] if request.algorithms else "kmeans"
+            if algo == "kmeans":
                 n_clusters = int(request.params.get("n_clusters", 3))
                 model = KMeans(n_clusters=n_clusters)
                 model.fit(X)
                 labels = model.labels_
-                # Metrics (Silhouette is expensive, just return cluster counts)
-                unique, counts = np.unique(labels, return_counts=True)
+                
+                # Add clusters to preview
+                df['Cluster'] = labels
+                
+                # PCA for Visualization
+                pca = PCA(n_components=2)
+                components = pca.fit_transform(X)
+                
+                scatter_data = []
+                for i in range(len(components)):
+                    scatter_data.append({
+                        "x": float(components[i][0]),
+                        "y": float(components[i][1]),
+                        "cluster": int(labels[i])
+                    })
+                
                 return {
-                    "metrics": {"inertia": float(model.inertia_)},
-                    "clusters": dict(zip([str(u) for u in unique], [int(c) for c in counts]))
+                    "metrics": {
+                        "silhouette_score": float(silhouette_score(X, labels)) if len(set(labels)) > 1 else 0
+                    },
+                    "clusters": scatter_data[:200], # Limit for UI
+                    "preview": df.head(10).to_dict(orient='records')
                 }
+            else:
+                 raise HTTPException(status_code=400, detail="Only KMeans supported for clustering currently")
         
         # For Regression/Classification
         y = df[request.target_column]
@@ -682,88 +741,72 @@ def train_model(request: TrainRequest):
                         "f1_weighted": float(f1_score(y_test, preds, average='weighted'))
                     }
                 return m, preds, mets
+            return None, None, None
 
-        if request.algorithm == "all":
-            results = []
-            if request.problem_type == "regression":
-                algos = ["linear", "ridge", "lasso", "dt", "rf", "svr", "gbr", "ada"]
-            else:
-                algos = ["logistic", "knn", "nb", "dt", "rf", "svm", "gbc", "ada"]
-            
-            best_score = -float('inf')
-            best_algo = None
-            best_model_data = None
-            
-            for algo in algos:
-                try:
-                    m, preds, mets = train_single(algo, request.problem_type)
-                    
-                    score = mets.get("r2") if request.problem_type == "regression" else mets.get("accuracy")
-                    if score > best_score:
-                        best_score = score
-                        best_algo = algo
-                        best_model_data = (m, preds, mets)
-                        
-                    results.append({
-                        "algorithm": algo,
-                        "metrics": mets
-                    })
-                except Exception as e:
-                    print(f"Failed {algo}: {e}")
-            
-            # Use best model for feature importance details
-            if best_model_data:
-                model, y_pred, metrics = best_model_data
-                
-                # Save Best Model
-                if not os.path.exists("models"): os.makedirs("models")
-                joblib.dump(model, "models/model.pkl")
-                
-                return {
-                    "metrics": metrics,
-                    "predictions_preview": y_pred[:10].tolist(),
-                    "actual_preview": y_test[:10].tolist(),
-                    "comparison": results,
-                    "best_algorithm": best_algo,
-                    "download_available": True
-                }
-
-            else:
-                raise HTTPException(status_code=500, detail="All models failed to train.")
-
-        # Single Model Path
-        model, y_pred, metrics = train_single(request.algorithm, request.problem_type)
-            
-        # Feature Importance (Tree based)
-        importance = {}
-        if hasattr(model, 'feature_importances_'):
-            for i, col in enumerate(request.feature_columns):
-                importance[col] = float(model.feature_importances_[i])
-        elif hasattr(model, 'coef_'):
-             # Linear cases (coef_ might be 2d for multiclass)
-             if hasattr(model.coef_, 'shape') and len(model.coef_.shape) > 1:
-                  # Take mean absolute coef for multiclass
-                  coefs = np.mean(np.abs(model.coef_), axis=0)
+        # Unified Multi-Algo Training
+        results = []
+        best_score = -float('inf')
+        best_algo = None
+        best_model_data = None
+        
+        algos_to_run = request.algorithms
+        if "all" in algos_to_run:
+             if request.problem_type == "regression":
+                algos_to_run = ["linear", "ridge", "lasso", "dt", "rf", "svr", "gbr", "ada"]
              else:
-                  coefs = np.abs(model.coef_)
-             for i, col in enumerate(request.feature_columns):
-                 if i < len(coefs):
-                    importance[col] = float(coefs[i])
+                algos_to_run = ["logistic", "knn", "nb", "dt", "rf", "svm", "gbc", "ada"]
 
-        return {
-            "metrics": metrics,
-            "feature_importance": importance,
-            "predictions_preview": y_pred[:10].tolist(),
-            "actual_preview": y_test[:10].tolist()
-        }
+        for algo in algos_to_run:
+            try:
+                m, preds, mets = train_single(algo, request.problem_type)
+                if not m: continue
+                
+                score = mets.get("r2") if request.problem_type == "regression" else mets.get("accuracy")
+                if score > best_score:
+                    best_score = score
+                    best_algo = algo
+                    best_model_data = (m, preds, mets)
+                    
+                results.append({
+                    "algorithm": algo,
+                    "metrics": mets
+                })
+            except Exception as e:
+                print(f"Failed {algo}: {e}")
+        
+        if not results:
+             raise HTTPException(status_code=400, detail="No models could be trained successfully")
+
+        # Use best model for feature importance details
+        if best_model_data:
+            model, y_pred, metrics = best_model_data
+            
+            # Save Best Model
+            if not os.path.exists("models"): os.makedirs("models")
+            joblib.dump(model, "models/model.pkl")
+            
+            # Feature Importance
+            f_imp = {}
+            if hasattr(model, 'feature_importances_'):
+                f_imp = dict(zip(request.feature_columns, model.feature_importances_))
+            elif hasattr(model, 'coef_'):
+                 if model.coef_.ndim > 1:
+                      f_imp = dict(zip(request.feature_columns, np.mean(np.abs(model.coef_), axis=0)))
+                 else:
+                      f_imp = dict(zip(request.feature_columns, np.abs(model.coef_)))
+            
+            return {
+                "metrics": metrics,
+                "predictions_preview": y_pred[:10].tolist(),
+                "actual_preview": y_test[:10].tolist(),
+                "comparison": results,
+                "best_algorithm": best_algo,
+                "feature_importance": f_imp,
+                "download_available": True
+            }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/export")
 def export_data():
     global active_df
     if active_df is None: raise HTTPException(status_code=400, detail="No data loaded")

@@ -6,16 +6,29 @@ const pythonEngineUrl = process.env.PYTHON_ENGINE_URL || 'http://localhost:8000'
 
 exports.processUpload = async (req, res) => {
     try {
-        const { filePath, fileType } = req.body; // Expects absolute path or relative from upload handling
+        const file_path = req.body.file_path || req.body.filePath;
+        const file_type = req.body.file_type || req.body.fileType || 'csv';
 
-        if (!filePath) {
+        console.log('[Info] processUpload called with:', { file_path, file_type });
+
+        if (!file_path) {
+            console.error('[Error] Missing file_path in request body:', req.body);
             return res.status(400).json({ error: 'File path is required' });
         }
 
+        // Verify file exists before sending to Python
+        const fs = require('fs');
+        if (!fs.existsSync(file_path)) {
+            console.error('[Error] File does not exist at path:', file_path);
+            return res.status(400).json({ error: `File not found at path: ${file_path}` });
+        }
+
+        console.log('[Info] File exists, sending to Python engine at:', pythonEngineUrl);
+
         // Call Python Engine
         const response = await axios.post(`${pythonEngineUrl}/load`, {
-            file_path: filePath,
-            file_type: fileType || 'csv'
+            file_path: file_path,
+            file_type: file_type || 'csv'
         });
 
         res.json(response.data);

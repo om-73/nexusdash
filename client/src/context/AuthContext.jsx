@@ -115,9 +115,7 @@ export const AuthProvider = ({ children }) => {
                     >
                         Retry Connection
                     </button>
-                    <p className="text-xs text-slate-400 mt-4">
-                        Troubleshooting: Ensure backend is running and you have set VITE_API_URL in Vercel.
-                    </p>
+
                 </div>
             </div>
         );
