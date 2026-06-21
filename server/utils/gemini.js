@@ -14,14 +14,14 @@ function getAIClient() {
 }
 
 /**
- * Generate content using Gemini 2.0 Flash
+ * Generate content using Gemini 2.5 Pro / Flash
  * @param {string} prompt - User prompt
  * @param {object} options - Optional parameters (e.g. systemInstruction, model)
  */
 async function generateText(prompt, options = {}) {
     const client = getAIClient();
     try {
-        const model = options.model || "gemini-2.0-flash";
+        const model = options.model || process.env.GEMINI_MODEL || "gemini-2.5-flash";
         const config = {};
         
         if (options.systemInstruction) {
@@ -61,7 +61,7 @@ async function chat(messages, options = {}) {
 
     try {
         const client = getAIClient();
-        const model = options.model || "gemini-2.0-flash";
+        const model = options.model || process.env.GEMINI_MODEL || "gemini-2.5-flash";
         
         // Map messages format to Gemini format
         const contents = messages.map(msg => ({
@@ -120,7 +120,7 @@ function getMockResponse(messages, isQuotaExceeded = false) {
         return prefix + "I can see the active dataset metadata. You have successfully loaded your dataset into active memory! You can use the **Overview** dashboard to view the column types, shapes, and memory usage.";
     }
     
-    return prefix + `I received your prompt: "${lastUserMessage}"\n\nTo get live answers from the Gemini 2.0 Flash model, please edit \`server/.env\` and replace \`GEMINI_API_KEY\` with a valid, active API key.`;
+    return prefix + `I received your prompt: "${lastUserMessage}"\n\nTo get live answers from the Gemini 2.5 Pro / Flash model, please edit \`server/.env\` and replace \`GEMINI_API_KEY\` with a valid, active API key.`;
 }
 
 module.exports = {

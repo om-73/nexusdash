@@ -8,9 +8,9 @@ const ai = new GoogleGenAI({});
 
 async function generateText() {
   try {
-    console.log("Sending query to gemini-2.0-flash...");
+    console.log("Sending query to gemini-2.5-flash...");
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash", 
+      model: "gemini-2.5-flash", 
       contents: "Explain the benefit of asynchronous programming in Node.js in one sentence.",
     });
 

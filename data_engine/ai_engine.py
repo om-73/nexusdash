@@ -21,9 +21,10 @@ class AIAnalyst:
             try:
                 import google.generativeai as genai
                 genai.configure(api_key=self.gemini_key)
-                self.model = genai.GenerativeModel('gemini-2.0-flash')
+                gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+                self.model = genai.GenerativeModel(gemini_model)
                 self.provider = "gemini"
-                logger.info("AI Analyst: Using Google Gemini (Free Tier)")
+                logger.info(f"AI Analyst: Using Google Gemini ({gemini_model})")
             except Exception as e:
                 logger.error(f"Failed to init Gemini: {e}")
 
