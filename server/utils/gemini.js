@@ -1,4 +1,5 @@
 const { GoogleGenAI } = require("@google/genai");
+const groq = require("./groq");
 
 let ai = null;
 
@@ -42,59 +43,55 @@ async function generateText(prompt, options = {}) {
 }
 
 /**
- * Handle a chat session conversation with error fallback
+ * Handle a chat session conversation with error fallback (Groq Llama 3.3 -> Gemini 2.5/2.0 Flash -> Local Deterministic)
  * @param {Array} messages - Chat messages in format [{ role: "user" | "assistant", content: "..." }]
  * @param {object} options - Optional config
  */
 async function chat(messages, options = {}) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    
-    // Check if key is the exhausted default key or missing
-    const isExhaustedKey = !apiKey || (apiKey.startsWith("AQ.Ab8RN6") && apiKey.length === 52);
-    
-    if (isExhaustedKey) {
-        if (process.env.NODE_ENV === 'production') {
-            return "I'm sorry, I encountered an issue connecting to my brain. Please verify that your Gemini API key is configured correctly in the environment.";
+    // 1. Try Groq (Llama 3.3 70B) if key is present
+    const groqKey = process.env.GROQ_API_KEY;
+    if (groqKey) {
+        try {
+            const reply = await groq.chat(messages, options);
+            if (reply) return reply;
+        } catch (error) {
+            console.error("[Fallback Pipeline] Groq Chat failed, falling back to Gemini:", error.message);
         }
-        return getMockResponse(messages, false);
     }
 
-    try {
-        const client = getAIClient();
-        const model = options.model || process.env.GEMINI_MODEL || "gemini-2.5-flash";
-        
-        // Map messages format to Gemini format
-        const contents = messages.map(msg => ({
-            role: msg.role === "assistant" ? "model" : "user",
-            parts: [{ text: msg.content }]
-        }));
-        
-        const config = {};
-        if (options.systemInstruction) {
-            config.systemInstruction = options.systemInstruction;
-        }
+    // 2. Try Gemini (2.5/2.0 Flash)
+    const geminiKey = process.env.GEMINI_API_KEY;
+    const isGeminiExhausted = !geminiKey || (geminiKey.startsWith("AQ.Ab8RN6") && geminiKey.length === 52);
 
-        const response = await client.models.generateContent({
-            model: model,
-            contents: contents,
-            config: config
-        });
+    if (!isGeminiExhausted) {
+        try {
+            const client = getAIClient();
+            const model = options.model || process.env.GEMINI_MODEL || "gemini-2.5-flash";
+            
+            const contents = messages.map(msg => ({
+                role: msg.role === "assistant" ? "model" : "user",
+                parts: [{ text: msg.content }]
+            }));
+            
+            const config = {};
+            if (options.systemInstruction) {
+                config.systemInstruction = options.systemInstruction;
+            }
 
-        return response.text;
-    } catch (error) {
-        console.error("Gemini Chat Utility Error:", error);
-        
-        if (process.env.NODE_ENV === 'production') {
-            return "I'm sorry, I encountered an issue connecting to my brain. Please verify that your Gemini API key is configured correctly in the environment.";
+            const response = await client.models.generateContent({
+                model: model,
+                contents: contents,
+                config: config
+            });
+
+            if (response.text) return response.text;
+        } catch (error) {
+            console.error("[Fallback Pipeline] Gemini Chat failed, falling back to local deterministic responses:", error.message);
         }
-        
-        // Handle Quota/API errors gracefully with a fallback message rather than throwing 500
-        if (error.status === 429 || (error.message && error.message.includes("quota"))) {
-            return `⚠️ **Gemini API Quota Exceeded (429)**\n\nThe API key configured in \`server/.env\` has a quota limit of 0 or has run out of requests for today. Please update \`server/.env\` with a new key from [Google AI Studio](https://aistudio.google.com/).\n\n**Simulated Assistant Fallback:**\n${getMockResponse(messages, true)}`;
-        }
-        
-        throw error;
     }
+
+    // 3. Local Deterministic Fallback (reliability without API dependency)
+    return getMockResponse(messages, isGeminiExhausted || !!groqKey);
 }
 
 // Generate an intelligent mock response for testing/fallback
@@ -103,8 +100,14 @@ function getMockResponse(messages, isQuotaExceeded = false) {
     const query = lastUserMessage.toLowerCase();
     
     let prefix = "";
-    if (!isQuotaExceeded) {
-        prefix = `⚠️ **Demo Mode** (No active Gemini API Key found in \`server/.env\`)\n\n`;
+    if (process.env.NODE_ENV === 'production') {
+        prefix = `⚠️ **Offline Demo Mode** (API keys are not configured or failed)\n\n`;
+    } else {
+        if (!isQuotaExceeded) {
+            prefix = `⚠️ **Demo Mode** (No active Gemini/Groq API Key found in \`server/.env\`)\n\n`;
+        } else {
+            prefix = `⚠️ **Fallback Mode** (API quota exceeded or key invalid)\n\n`;
+        }
     }
     
     if (query.includes("clean") || query.includes("missing") || query.includes("null") || query.includes("drop") || query.includes("impute")) {
@@ -120,7 +123,10 @@ function getMockResponse(messages, isQuotaExceeded = false) {
         return prefix + "I can see the active dataset metadata. You have successfully loaded your dataset into active memory! You can use the **Overview** dashboard to view the column types, shapes, and memory usage.";
     }
     
-    return prefix + `I received your prompt: "${lastUserMessage}"\n\nTo get live answers from the Gemini 2.5 Pro / Flash model, please edit \`server/.env\` and replace \`GEMINI_API_KEY\` with a valid, active API key.`;
+    if (process.env.NODE_ENV === 'production') {
+        return prefix + `I received your prompt: "${lastUserMessage}"\n\nTo get live answers from the AI, please configure your \`GROQ_API_KEY\` or \`GEMINI_API_KEY\` in your environment variables.`;
+    }
+    return prefix + `I received your prompt: "${lastUserMessage}"\n\nTo get live answers from Groq (Llama 3.3) or Gemini (2.5 Pro / Flash), please edit \`server/.env\` and add your API keys.`;
 }
 
 module.exports = {
