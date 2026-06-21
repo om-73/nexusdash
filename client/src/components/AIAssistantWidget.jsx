@@ -8,7 +8,7 @@ export default function AIAssistantWidget() {
     const [messages, setMessages] = useState([
         {
             role: 'assistant',
-            content: 'Hello! I am **Nexus AI**, your data intelligence assistant. I am powered by **Gemini 2.5 Pro / Flash** ⚡\n\nHow can I help you with your data workflow, cleaning, or machine learning model today?'
+            content: 'Hello! I am **Nexus AI**, your data intelligence assistant. ⚡\n\nHow can I help you with your data workflow, cleaning, or machine learning model today?'
         }
     ]);
     const [input, setInput] = useState('');
@@ -145,7 +145,7 @@ export default function AIAssistantWidget() {
                                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                                     </span>
                                 </h3>
-                                <p className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider">Gemini 2.5 Pro / Flash</p>
+                                <p className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider">AI Assistant</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">

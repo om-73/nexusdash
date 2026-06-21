@@ -91,6 +91,9 @@ async function chat(messages, options = {}) {
     }
 
     // 3. Local Deterministic Fallback (reliability without API dependency)
+    if (process.env.NODE_ENV === 'production') {
+        return "I'm sorry, I encountered an issue connecting to my brain. Please verify that your Gemini API key is configured correctly in the environment.";
+    }
     return getMockResponse(messages, isGeminiExhausted || !!groqKey);
 }
 
