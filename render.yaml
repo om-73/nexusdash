@@ -1,0 +1,16 @@
+services:
+  # Single Hybrid Service (Node + Python in Docker)
+  - type: web
+    name: nexusdash-unified
+    env: docker
+    region: oregon
+    plan: free
+    rootDir: .
+    envVars:
+      - key: PYTHON_ENGINE_URL
+        value: http://127.0.0.1:8000
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=256
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
