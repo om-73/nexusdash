@@ -70,7 +70,7 @@ const ModelPrediction = () => {
             setPrediction(result.prediction);
         } catch (err) {
             console.error(err);
-            setError(err.response?.data?.detail || "Prediction failed");
+            setError(err.response?.data?.error || err.response?.data?.detail || err.message || "Prediction failed");
         } finally {
             setPredicting(false);
         }

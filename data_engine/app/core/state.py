@@ -22,6 +22,13 @@ def set_active_df(df: pd.DataFrame):
 def get_history_stack():
     return history_stack
 
+def push_to_history(df: pd.DataFrame):
+    global history_stack
+    history_stack.append(df)
+    if len(history_stack) > 10:
+        history_stack.pop(0)
+
+
 def get_redo_stack():
     return redo_stack
 

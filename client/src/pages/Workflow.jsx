@@ -98,7 +98,7 @@ export default function Workflow() {
             setDataPreview(res.preview);
             alert(`Feature ${name} created!`);
         } catch (e) {
-            alert("Feature creation failed: " + e.response?.data?.detail);
+            alert("Feature creation failed: " + (e.response?.data?.error || e.response?.data?.detail || e.message));
         } finally {
             setLoading(false);
         }
@@ -115,7 +115,7 @@ export default function Workflow() {
             });
             setModelResults(res);
         } catch (e) {
-            alert("Training failed: " + e.response?.data?.detail);
+            alert("Training failed: " + (e.response?.data?.error || e.response?.data?.detail || e.message));
         } finally {
             setLoading(false);
         }

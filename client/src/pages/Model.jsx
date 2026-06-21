@@ -80,7 +80,7 @@ export default function Model() {
             }
         } catch (err) {
             console.error(err);
-            setError(err.response?.data?.detail || "Training failed");
+            setError(err.response?.data?.error || err.response?.data?.detail || err.message || "Training failed");
         } finally {
             setLoading(false);
         }

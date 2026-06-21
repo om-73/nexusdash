@@ -54,8 +54,8 @@ if (process.env.SPAWN_PYTHON === 'true') {
 
     // Start Python Engine Programmatically
     const pythonCwd = path.join(__dirname, '../data_engine');
-    // Use "python" command assuming it's in PATH (Docker uses python:3.11 image)
-    const pythonCmd = 'python';
+    // Use configured PYTHON_PATH or default to 'python' (Docker / most envs)
+    const pythonCmd = process.env.PYTHON_PATH || 'python';
     const pythonProcess = spawn(pythonCmd, ['-m', 'uvicorn', 'app.main:app', '--host', '0.0.0.0', '--port', '8000'], {
         cwd: pythonCwd,
         env: { ...process.env, PYTHONUNBUFFERED: '1' }
@@ -149,54 +149,48 @@ app.get('/api/debug/logs', (req, res) => {
     });
 });
 
-// Manual Cleanup Endpoint
 app.post('/api/cleanup', async (req, res) => {
     try {
         console.log('[Manual Cleanup] Cleanup requested via API');
         const uploadDirPath = path.join(__dirname, 'uploads');
+        const fsp = require('fs').promises;
 
-        fs.readdir(uploadDirPath, async (err, files) => {
-            if (err) {
-                return res.status(500).json({ error: 'Failed to read upload directory' });
+        if (!fs.existsSync(uploadDirPath)) {
+            return res.json({ message: 'Upload directory does not exist', deletedCount: 0, deletedFiles: [], freedSpaceMB: '0.00' });
+        }
+
+        const files = await fsp.readdir(uploadDirPath);
+        const now = Date.now();
+        const FILE_RETENTION_TIME = process.env.FILE_RETENTION_HOURS ?
+            (parseInt(process.env.FILE_RETENTION_HOURS) * 60 * 60 * 1000) :
+            (24 * 60 * 60 * 1000);
+
+        let deletedFiles = [];
+        let totalSize = 0;
+
+        for (const file of files) {
+            if (file === '.gitkeep') continue;
+
+            const filePath = path.join(uploadDirPath, file);
+            try {
+                const stats = await fsp.stat(filePath);
+                const age = now - stats.mtimeMs;
+                if (age > FILE_RETENTION_TIME) {
+                    await fsp.unlink(filePath);
+                    console.log(`[Manual Cleanup] Deleted: ${file}`);
+                    deletedFiles.push(file);
+                    totalSize += stats.size;
+                }
+            } catch (err) {
+                console.error(`[Manual Cleanup] Error processing file ${file}:`, err.message);
             }
+        }
 
-            const now = Date.now();
-            const FILE_RETENTION_TIME = process.env.FILE_RETENTION_HOURS ?
-                (parseInt(process.env.FILE_RETENTION_HOURS) * 60 * 60 * 1000) :
-                (24 * 60 * 60 * 1000);
-
-            let deletedFiles = [];
-            let totalSize = 0;
-
-            files.forEach(file => {
-                if (file === '.gitkeep') return;
-
-                const filePath = path.join(uploadDirPath, file);
-                fs.stat(filePath, (err, stats) => {
-                    if (err) return;
-
-                    const age = now - stats.mtimeMs;
-                    if (age > FILE_RETENTION_TIME) {
-                        fs.unlink(filePath, (err) => {
-                            if (!err) {
-                                console.log(`[Manual Cleanup] Deleted: ${file}`);
-                                deletedFiles.push(file);
-                                totalSize += stats.size;
-                            }
-                        });
-                    }
-                });
-            });
-
-            // Send response after processing
-            setTimeout(() => {
-                res.json({
-                    message: 'Cleanup completed',
-                    deletedCount: deletedFiles.length,
-                    deletedFiles: deletedFiles,
-                    freedSpaceMB: (totalSize / (1024 * 1024)).toFixed(2)
-                });
-            }, 500);
+        res.json({
+            message: 'Cleanup completed',
+            deletedCount: deletedFiles.length,
+            deletedFiles: deletedFiles,
+            freedSpaceMB: (totalSize / (1024 * 1024)).toFixed(2)
         });
     } catch (error) {
         res.status(500).json({ error: error.message });

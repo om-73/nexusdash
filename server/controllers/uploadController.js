@@ -87,6 +87,15 @@ exports.cleanupFile = async (req, res) => {
         if (!filePath) {
             return res.status(400).json({ error: 'filePath parameter is missing' });
         }
+        
+        // Prevent Path Traversal
+        const uploadDir = path.resolve(__dirname, '../uploads');
+        const resolvedPath = path.resolve(filePath);
+        if (!resolvedPath.startsWith(uploadDir)) {
+            console.error('[Security] Attempted directory traversal deletion:', filePath);
+            return res.status(403).json({ error: 'Access denied: File must reside in uploads directory' });
+        }
+
         await deleteFileImmediately(filePath);
         res.json({ message: 'File deleted automatically' });
     } catch (err) {

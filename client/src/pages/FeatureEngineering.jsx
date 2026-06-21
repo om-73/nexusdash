@@ -70,7 +70,7 @@ export default function FeatureEngineering() {
             setFeatures([]);
             alert('Features created successfully!');
         } catch (err) {
-            setError(err.response?.data?.detail || err.message || 'Feature engineering failed');
+            setError(err.response?.data?.error || err.response?.data?.detail || err.message || 'Feature engineering failed');
         } finally {
             setLoading(false);
         }

@@ -17,8 +17,15 @@ exports.processUpload = async (req, res) => {
             return res.status(400).json({ error: 'File path is required' });
         }
 
-        // Verify file exists before sending to Python
+        // Prevent Path Traversal
         const fs = require('fs');
+        const uploadDir = path.resolve(__dirname, '../uploads');
+        const resolvedPath = path.resolve(file_path);
+        if (!resolvedPath.startsWith(uploadDir)) {
+            console.error('[Security] Attempted directory traversal load:', file_path);
+            return res.status(403).json({ error: 'Access denied: File must reside in uploads directory' });
+        }
+
         if (!fs.existsSync(file_path)) {
             console.error('[Error] File does not exist at path:', file_path);
             return res.status(400).json({ error: `File not found at path: ${file_path}` });

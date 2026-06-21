@@ -135,7 +135,7 @@ def clean_data(request: CleanRequest):
         raise HTTPException(status_code=400, detail="Session reset. Please reload your dataset.")
     try:
         # PUSH HISTORY
-        state.history_stack.append(df.copy())
+        state.push_to_history(df.copy())
         state.redo_stack.clear()
         state.redo_action_history.clear()
 
@@ -254,7 +254,7 @@ def redo_action():
         raise HTTPException(status_code=400, detail="Nothing to redo")
     try:
         active_df = state.get_active_df()
-        state.history_stack.append(active_df)
+        state.push_to_history(active_df)
         if state.redo_action_history: state.action_history.append(state.redo_action_history.pop())
         
         state.set_active_df(state.redo_stack.pop())
@@ -280,7 +280,7 @@ def add_feature(request: FeatureBuildRequest):
     df = state.get_active_df()
     if df is None: raise HTTPException(status_code=400, detail="No data loaded")
     try:
-        state.history_stack.append(df.copy())
+        state.push_to_history(df.copy())
         df = df.copy()
         
         # Preprocess expression: wrap columns with spaces in backticks so df.eval works seamlessly
@@ -314,7 +314,7 @@ def engineer_features(request: FeatureEngineerRequest):
     df = state.get_active_df()
     if df is None: raise HTTPException(status_code=400, detail="No data loaded")
     try:
-        state.history_stack.append(df.copy())
+        state.push_to_history(df.copy())
         df = df.copy()
         
         for feature in request.features:
