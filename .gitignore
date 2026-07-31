@@ -38,3 +38,5 @@ create_*.py
 test_*.py
 *.csv
 !dummy_data.csv
+resume.tex
+
