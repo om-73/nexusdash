@@ -1,11 +1,21 @@
 import axios from 'axios';
 
+const isLocalhost = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' || 
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === '0.0.0.0'
+);
+
+
 const PROD_URL = 'https://nexusdash-4.onrender.com/api';
-const API_URL = import.meta.env.DEV ? 'http://localhost:5001/api' : (import.meta.env.VITE_API_URL || PROD_URL);
+const API_URL = isLocalhost 
+    ? `${window.location.protocol}//${window.location.hostname}:5001/api`
+    : (import.meta.env.VITE_API_URL || PROD_URL);
 
 export const api = axios.create({
     baseURL: API_URL,
 });
+
 
 // Request interceptor to log requests
 api.interceptors.request.use(request => {
