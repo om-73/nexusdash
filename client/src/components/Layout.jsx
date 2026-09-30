@@ -1,25 +1,32 @@
 import React, { useState, Suspense } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Database, Home, BarChart2, Cpu, Wrench, Settings, Menu, X, Layers, Zap, Grid } from 'lucide-react';
+import { Database, Home, BarChart2, Cpu, Wrench, Settings, Menu, X, Layers, Zap, Grid, Bot } from 'lucide-react';
 import clsx from 'clsx';
 import logo from '../assets/logo.png';
 import AIAssistantWidget from './AIAssistantWidget';
 
-const SidebarItem = ({ to, icon: Icon, label, onClick }) => (
+const SidebarItem = ({ to, icon: Icon, label, onClick, badge }) => (
     <NavLink
         to={to}
         onClick={onClick}
         className={({ isActive }) =>
             clsx(
-                'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group',
+                'flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 group',
                 isActive
                     ? 'bg-primary text-white shadow-lg shadow-primary/30'
                     : 'text-slate-500 hover:bg-white hover:text-primary hover:shadow-sm'
             )
         }
     >
-        <Icon size={20} />
-        <span className="font-medium">{label}</span>
+        <div className="flex items-center gap-3">
+            <Icon size={20} />
+            <span className="font-medium">{label}</span>
+        </div>
+        {badge && (
+            <span className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                {badge}
+            </span>
+        )}
     </NavLink>
 );
 
@@ -53,8 +60,9 @@ const Sidebar = ({ isOpen, onClose }) => {
                     </button>
                 </div>
 
-                <nav className="flex-1 space-y-1">
+                <nav className="flex-1 space-y-1 overflow-y-auto pr-1">
                     <SidebarItem to="/" icon={Home} label="Overview" onClick={onClose} />
+                    <SidebarItem to="/agent" icon={Bot} label="Autonomous Agent" badge="AI" onClick={onClose} />
                     <SidebarItem to="/dashboard/custom" icon={Grid} label="Custom Dashboard" onClick={onClose} />
                     <SidebarItem to="/workflow" icon={Layers} label="Data Workflow" onClick={onClose} />
                     <SidebarItem to="/load" icon={Database} label="Data Source" onClick={onClose} />

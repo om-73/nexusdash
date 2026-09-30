@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, Send, Sparkles, X, Bot, RefreshCw } from 'lucide-react';
+import { MessageSquare, Send, Sparkles, X, Bot, RefreshCw, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { chatWithAI } from '../services/api';
 import { useData } from '../context/DataContext';
 
@@ -163,6 +164,22 @@ export default function AIAssistantWidget() {
                                 <X size={16} />
                             </button>
                         </div>
+                    </div>
+
+                    {/* Autonomous Agent Banner */}
+                    <div className="bg-indigo-950/70 border-b border-indigo-900/60 px-3.5 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-xs text-indigo-200">
+                            <Sparkles size={13} className="text-cyan-400 shrink-0" />
+                            <span className="font-medium text-[11px]">Full Automated AI Agent is ready</span>
+                        </div>
+                        <Link
+                            to="/agent"
+                            onClick={() => setIsOpen(false)}
+                            className="text-[11px] bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 transition shadow-sm"
+                        >
+                            <span>Launch</span>
+                            <ArrowRight size={11} />
+                        </Link>
                     </div>
 
                     {/* Messages Body */}

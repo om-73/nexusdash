@@ -15,6 +15,7 @@ const Model = lazy(() => import('./pages/Model'));
 const ModelPrediction = lazy(() => import('./pages/ModelPrediction'));
 const Workflow = lazy(() => import('./pages/Workflow'));
 const CustomDashboard = lazy(() => import('./pages/CustomDashboard'));
+const AutonomousAgent = lazy(() => import('./pages/AutonomousAgent'));
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
                 <Route element={<ProtectedRoute />}>
                   <Route path="/" element={<Layout />}>
                     <Route index element={<Dashboard />} />
+                    <Route path="agent" element={<AutonomousAgent />} />
                     <Route path="load" element={<DataLoad />} />
                     <Route path="clean" element={<DataClean />} />
                     <Route path="features" element={<FeatureEngineering />} />

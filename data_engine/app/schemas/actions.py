@@ -105,3 +105,20 @@ class KPICalculateRequest(BaseModel):
 
 class AIProcessRequest(BaseModel):
     query: str
+
+class AutoAgentRunRequest(BaseModel):
+    goal: Optional[str] = "Full Auto-Pilot: Profile, Clean, Engineer Features & Train Champion Model"
+    target_column: Optional[str] = None
+    problem_type: Optional[str] = "auto"
+    feature_engineering: Optional[bool] = True
+    outlier_handling: Optional[bool] = True
+
+class AutoAgentSampleRequest(BaseModel):
+    dataset_name: str # churn, housing, retention
+    auto_run: Optional[bool] = True
+    goal: Optional[str] = None
+
+class AutoAgentPlanRequest(BaseModel):
+    goal: Optional[str] = None
+    target_column: Optional[str] = None
+

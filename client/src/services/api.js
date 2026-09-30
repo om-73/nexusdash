@@ -187,3 +187,19 @@ export const getQuantile = async (column, q = 0.95) => {
     const response = await api.get('/data/quantile', { params: { column, q } });
     return response.data;
 };
+
+export const runAutonomousAgent = async (params = {}) => {
+    const response = await api.post('/agent/run', params);
+    return response.data;
+};
+
+export const loadAgentSample = async (datasetName, autoRun = true, goal = null) => {
+    const response = await api.post('/agent/sample', { dataset_name: datasetName, auto_run: autoRun, goal });
+    return response.data;
+};
+
+export const getAgentPlan = async (params = {}) => {
+    const response = await api.post('/agent/plan', params);
+    return response.data;
+};
+

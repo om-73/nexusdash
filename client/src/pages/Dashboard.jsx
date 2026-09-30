@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
 import { Link } from 'react-router-dom';
-import { Database, TrendingUp, AlertOctagon, Layers, Search, Sparkles, Upload, ArrowRight, Table2, AlertTriangle, Activity, FileText, CheckCircle } from 'lucide-react';
+import { Database, TrendingUp, AlertOctagon, Layers, Search, Sparkles, Upload, ArrowRight, Table2, AlertTriangle, Activity, FileText, CheckCircle, Bot } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { queryMachineLearning, getKPIs } from '../services/api';
 import SmartCharts from '../components/SmartCharts';
@@ -137,13 +137,43 @@ export default function Dashboard() {
                     <p className="text-slate-500 mt-1">High-level summary of your current data</p>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                    <Link to="/" className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600 font-medium transition-colors text-sm md:text-base">
+                    <Link to="/agent" className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 text-white rounded-lg hover:from-indigo-700 hover:to-cyan-700 shadow-md shadow-indigo-300 font-bold transition-all text-sm md:text-base group">
+                        <Bot size={18} className="group-hover:animate-bounce" />
+                        <span>Launch AI Agent</span>
+                        <span className="bg-white/20 text-white text-[10px] px-1.5 py-0.5 rounded-full uppercase tracking-wider">AutoML</span>
+                    </Link>
+                    <Link to="/load" className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600 font-medium transition-colors text-sm md:text-base">
                         <Upload size={18} /> Change Dataset
                     </Link>
                     <Link to="/clean" className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 shadow-sm shadow-blue-200 font-medium transition-colors text-sm md:text-base">
                         Clean Data <ArrowRight size={18} />
                     </Link>
                 </div>
+            </div>
+
+            {/* Autonomous Agent Spotlight Banner */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-5 border border-indigo-900/40 text-white shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center text-white shrink-0 shadow-md shadow-indigo-500/30">
+                        <Bot size={22} />
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-sm text-white">Full Automated AI Agent</h3>
+                            <span className="bg-cyan-950 text-cyan-400 border border-cyan-800/60 text-[10px] font-mono px-2 py-0.5 rounded-full">ACTIVE</span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                            Automate end-to-end data cleaning, anomaly repair, multi-model tournament benchmarking, and driver discovery with 1 click.
+                        </p>
+                    </div>
+                </div>
+                <Link
+                    to="/agent"
+                    className="bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-600 hover:to-cyan-600 text-white text-xs font-bold py-2.5 px-4 rounded-xl shrink-0 shadow transition flex items-center gap-1.5"
+                >
+                    <span>Run Autonomous Agent</span>
+                    <ArrowRight size={14} />
+                </Link>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">

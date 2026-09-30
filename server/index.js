@@ -42,6 +42,7 @@ initializeDefaultUser();
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/upload', require('./routes/uploadRoutes'));
 app.use('/api/data', require('./routes/dataRoutes'));
+app.use('/api/agent', require('./routes/agentRoutes'));
 
 // python process management
 let recentLogs = "Not started (SPAWN_PYTHON != true)";

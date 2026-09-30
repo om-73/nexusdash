@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api.routers import data, eda, ml, db
+from .api.routers import data, eda, ml, db, agent
 
 app = FastAPI(title="Data Engine API", version="2.0")
 
@@ -17,6 +17,7 @@ app.include_router(data.router, tags=["Data"])
 app.include_router(eda.router, tags=["EDA"])
 app.include_router(ml.router, tags=["ML"])
 app.include_router(db.router, tags=["Database"])
+app.include_router(agent.router, prefix="/agent", tags=["Agent"])
 
 @app.get("/")
 @app.head("/")

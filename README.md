@@ -14,7 +14,15 @@ NexusDash is a comprehensive data intelligence platform designed for modern ente
 
 ## 🌟 Key Features
 
-### 1. Data Connectivity & Management
+### 1. Autonomous AI Agent (AutoML Core v2.5)
+- **1-Click Autonomous Execution**: Automated end-to-end data pipeline: Deep Profiling ➔ Self-Healing Cleaning ➔ Feature Synthesis ➔ Multi-Model Tournament ➔ Driver Attribution ➔ Executive Report.
+- **AutoML Tournament Arena**: Benchmarks candidate algorithms (Random Forest, Gradient Boosting, Logistic/Ridge Regression, Decision Trees) and crowns the champion model based on validation metrics.
+- **Real-Time Reasoning Stream**: Hacker/Mission-Control terminal interface with live thought streaming, tool execution badges, and progress tracking.
+- **Self-Healing Data Quality**: Automatically imputes missing values, eliminates duplicate records, caps extreme outliers, and strips leakage columns.
+- **Instant Live Inference**: Interactive prediction sandbox pre-populated with active dataset features for real-time inference.
+
+### 2. Data Connectivity & Management
+
 - **Universal Connectors**: Upload CSV/Excel formats with robust encoding support or connect to external data sources.
 - **Observability**: Immediate insights into your dataset with automatic summary statistics.
 - **PII Protection**: Auto-detection and masking of sensitive information (Emails, SSNs, Credit Cards) during ingestion.

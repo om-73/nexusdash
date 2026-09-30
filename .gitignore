@@ -25,6 +25,9 @@ build
 # Data
 uploads/*
 !uploads/.gitkeep
+server/uploads/*
+!server/uploads/.gitkeep
+
 *.db
 *.sqlite3
 
