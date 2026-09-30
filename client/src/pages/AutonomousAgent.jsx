@@ -808,8 +808,8 @@ export default function AutonomousAgent() {
                                             </p>
                                         </div>
 
-                                        <div className="h-64 w-full">
-                                            <ResponsiveContainer width="100%" height="100%">
+                                        <div className="w-full min-w-0" style={{ height: 260, minHeight: 260 }}>
+                                            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={260}>
                                                 <BarChart data={runData.feature_importance} layout="vertical" margin={{ left: 40, right: 20 }}>
                                                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                                                     <XAxis type="number" unit="%" tick={{ fontSize: 11 }} />

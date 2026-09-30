@@ -189,17 +189,45 @@ export const getQuantile = async (column, q = 0.95) => {
 };
 
 export const runAutonomousAgent = async (params = {}) => {
-    const response = await api.post('/agent/run', params);
-    return response.data;
+    try {
+        const response = await api.post('/agent/run', params);
+        return response.data;
+    } catch (err) {
+        if (err.response?.status === 404) {
+            console.log('[API Fallback] Retrying via /data/agent/run...');
+            const fallback = await api.post('/data/agent/run', params);
+            return fallback.data;
+        }
+        throw err;
+    }
 };
 
 export const loadAgentSample = async (datasetName, autoRun = true, goal = null) => {
-    const response = await api.post('/agent/sample', { dataset_name: datasetName, auto_run: autoRun, goal });
-    return response.data;
+    try {
+        const response = await api.post('/agent/sample', { dataset_name: datasetName, auto_run: autoRun, goal });
+        return response.data;
+    } catch (err) {
+        if (err.response?.status === 404) {
+            console.log('[API Fallback] Retrying via /data/agent/sample...');
+            const fallback = await api.post('/data/agent/sample', { dataset_name: datasetName, auto_run: autoRun, goal });
+            return fallback.data;
+        }
+        throw err;
+    }
 };
 
 export const getAgentPlan = async (params = {}) => {
-    const response = await api.post('/agent/plan', params);
-    return response.data;
+    try {
+        const response = await api.post('/agent/plan', params);
+        return response.data;
+    } catch (err) {
+        if (err.response?.status === 404) {
+            console.log('[API Fallback] Retrying via /data/agent/plan...');
+            const fallback = await api.post('/data/agent/plan', params);
+            return fallback.data;
+        }
+        throw err;
+    }
 };
+
 

@@ -52,11 +52,12 @@ export default function SmartCharts() {
                             <p className="text-sm text-slate-500">{rec.description}</p>
                         </div>
 
-                        <div className="h-64">
-                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                        <div className="w-full min-w-0" style={{ height: 260, minHeight: 260 }}>
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={260}>
                                 {renderChart(rec)}
                             </ResponsiveContainer>
                         </div>
+
                     </div>
                 ))}
             </div>

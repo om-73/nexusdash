@@ -37,10 +37,16 @@ router.post('/validate-contract', dataController.validateContract);
 router.get('/scan-pii', dataController.scanPII);
 router.post('/mask-data', auditLogger('Mask Data'), dataController.maskData);
 
+const agentController = require('../controllers/agentController');
+
 // Intelligence & AI
 router.post('/ai/chat', dataController.aiChat);
 router.post('/ai/configure', dataController.configureAI);
 router.post('/analyze-drivers', dataController.analyzeDrivers);
+router.post('/agent/run', auditLogger('Autonomous Agent Run'), agentController.runAgent);
+router.post('/agent/sample', auditLogger('Load Agent Sample'), agentController.loadSample);
+router.post('/agent/plan', agentController.getPlan);
+
 
 // Analytics & Engineering
 router.post('/query/builder', dataController.queryBuilder);
