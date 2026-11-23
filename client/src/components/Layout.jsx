@@ -3,7 +3,9 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Database, Home, BarChart2, Cpu, Wrench, Settings, Menu, X, Layers, Zap, Grid, Bot } from 'lucide-react';
 import clsx from 'clsx';
 import logo from '../assets/logo.png';
-import AIAssistantWidget from './AIAssistantWidget';
+import DatasetScopeBar from './DatasetScopeBar';
+
+const AIAssistantWidget = React.lazy(() => import('./AIAssistantWidget'));
 
 const SidebarItem = ({ to, icon: Icon, label, onClick, badge }) => (
     <NavLink
@@ -98,19 +100,24 @@ export default function Layout() {
 
             <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
-            <div className="md:ml-64 min-h-screen pt-16 md:pt-0 transition-all duration-300">
-                <Suspense fallback={
-                    <div className="flex h-[calc(100vh-4rem)] md:h-screen w-full items-center justify-center p-12 text-slate-500">
-                        <div className="flex flex-col items-center gap-3">
-                            <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-primary animate-spin"></div>
-                            <span className="font-medium">Loading component...</span>
+            <div className="md:ml-64 min-h-screen pt-16 md:pt-0 transition-all duration-300 flex flex-col">
+                <DatasetScopeBar />
+                <div className="flex-1">
+                    <Suspense fallback={
+                        <div className="flex h-[calc(100vh-4rem)] md:h-screen w-full items-center justify-center p-12 text-slate-500">
+                            <div className="flex flex-col items-center gap-3">
+                                <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-primary animate-spin"></div>
+                                <span className="font-medium">Loading component...</span>
+                            </div>
                         </div>
-                    </div>
-                }>
-                    <Outlet />
-                </Suspense>
+                    }>
+                        <Outlet />
+                    </Suspense>
+                </div>
             </div>
-            <AIAssistantWidget />
+            <Suspense fallback={null}>
+                <AIAssistantWidget />
+            </Suspense>
         </div>
     );
 }

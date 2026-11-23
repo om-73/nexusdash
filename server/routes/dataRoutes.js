@@ -8,6 +8,7 @@ const auditLogger = require('../middleware/auditLogger');
 router.use(authenticate);
 
 router.post('/load', auditLogger('Load Data'), dataController.processUpload);
+router.post('/combine', auditLogger('Combine Datasets'), dataController.combineDatasets);
 router.get('/state', dataController.getState);
 router.post('/clean', auditLogger('Clean Data'), dataController.cleanData);
 router.get('/eda', dataController.getEDA);

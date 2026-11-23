@@ -8,18 +8,49 @@ const pythonEngineUrl = process.env.PYTHON_ENGINE_URL || 'http://127.0.0.1:8000'
 exports.processUpload = async (req, res) => {
     try {
         const file_path = req.body.file_path || req.body.filePath;
+        const file_paths = req.body.file_paths || req.body.filePaths;
         const file_type = req.body.file_type || req.body.fileType || 'csv';
+        const combine_method = req.body.combine_method || req.body.combineMethod || 'concat';
+        const join_key = req.body.join_key || req.body.joinKey;
 
-        console.log('[Info] processUpload called with:', { file_path, file_type });
+        console.log('[Info] processUpload called with:', { file_path, file_paths, file_type, combine_method, join_key });
 
+        const fs = require('fs');
+        const uploadDir = path.resolve(__dirname, '../uploads');
+
+        // Multi-file load / combine
+        if (Array.isArray(file_paths) && file_paths.length > 0) {
+            for (const fp of file_paths) {
+                const resolvedPath = path.resolve(fp);
+                if (!resolvedPath.startsWith(uploadDir)) {
+                    console.error('[Security] Attempted directory traversal load:', fp);
+                    return res.status(403).json({ error: 'Access denied: File must reside in uploads directory' });
+                }
+                if (!fs.existsSync(resolvedPath)) {
+                    console.error('[Error] File does not exist at path:', fp);
+                    return res.status(400).json({ error: `File not found at path: ${fp}` });
+                }
+            }
+
+            console.log(`[Info] Multiple files (${file_paths.length}) exist, sending to Python engine at:`, pythonEngineUrl);
+            const response = await axios.post(`${pythonEngineUrl}/load`, {
+                file_path: file_paths[0],
+                file_paths: file_paths,
+                file_type: file_type,
+                combine_method: combine_method,
+                join_key: join_key
+            }, { timeout: 300000 });
+
+            console.log('[Debug] Data Engine responded with status:', response.status);
+            return res.json(response.data);
+        }
+
+        // Single file load
         if (!file_path) {
             console.error('[Error] Missing file_path in request body:', req.body);
             return res.status(400).json({ error: 'File path is required' });
         }
 
-        // Prevent Path Traversal
-        const fs = require('fs');
-        const uploadDir = path.resolve(__dirname, '../uploads');
         const resolvedPath = path.resolve(file_path);
         if (!resolvedPath.startsWith(uploadDir)) {
             console.error('[Security] Attempted directory traversal load:', file_path);
@@ -37,7 +68,7 @@ exports.processUpload = async (req, res) => {
         const response = await axios.post(`${pythonEngineUrl}/load`, {
             file_path: file_path,
             file_type: file_type || 'csv'
-        });
+        }, { timeout: 300000 });
 
         console.log('[Debug] Data Engine responded with status:', response.status);
         if (response.data) {
@@ -68,10 +99,10 @@ exports.processUpload = async (req, res) => {
 
 exports.getState = async (req, res) => {
     try {
-        const response = await axios.get(`${pythonEngineUrl}/state`);
+        const response = await axios.get(`${pythonEngineUrl}/state`, { timeout: 2000 });
         res.json(response.data);
     } catch (error) {
-        // If 404 or connection error, just return null (no state)
+        // If 404, timeout, or connection error, just return null (no state) quickly
         res.json(null);
     }
 };
@@ -105,7 +136,7 @@ exports.getEDA = async (req, res) => {
 
 exports.trainModel = async (req, res) => {
     try {
-        const response = await axios.post(`${pythonEngineUrl}/train`, req.body);
+        const response = await axios.post(`${pythonEngineUrl}/train`, req.body, { timeout: 600000 });
         res.json(response.data);
     } catch (error) {
         console.error('Error training model:', error.message);
@@ -438,6 +469,10 @@ exports.diffSnapshots = async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: 'Failed to diff snapshots' });
     }
+};
+
+exports.combineDatasets = async (req, res) => {
+    return exports.processUpload(req, res);
 };
 
 exports.saveDashboard = async (req, res) => {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
 import { cleanData, exportData, undoAction, redoAction, getDataQuality, getPipeline } from '../services/api';
-import { Trash2, Copy, Filter, Check, Eraser, Columns, ShieldAlert, Binary, Scaling, Download, Undo2, Redo2, Activity, Loader, Edit2 } from 'lucide-react';
+import { Trash2, Copy, Filter, Check, Eraser, Columns, ShieldAlert, Binary, Scaling, Download, Undo2, Redo2, Activity, Loader, Edit2, Sparkles, ArrowRight, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 
@@ -24,7 +24,7 @@ const ActionButton = ({ icon: Icon, label, onClick, disabled }) => (
 );
 
 export default function DataClean() {
-    const { dataSummary, setDataSummary, setDataPreview, setLoading, loading, setError } = useData();
+    const { dataSummary, setDataSummary, setDataPreview, setLoading, loading, setError, cleaningResult } = useData();
     const navigate = useNavigate();
     const { addToast } = useToast();
     const [selectedColumns, setSelectedColumns] = useState([]);
@@ -438,6 +438,89 @@ export default function DataClean() {
                         </div>
                     </div>
                 )}
+                {/* Autonomous / Cross-Page Cleaning Result Banner */}
+                {cleaningResult && (
+                    <div className="mb-6 bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border border-emerald-200/80 rounded-2xl p-5 shadow-sm space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-200/60 pb-3">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-sm">
+                                    <Sparkles size={16} />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-bold text-emerald-950 flex items-center gap-2">
+                                        Autonomous Cleaning Operation Synced
+                                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-mono px-2 py-0.5 rounded-full border border-emerald-300">
+                                            Auto-Remediated
+                                        </span>
+                                    </h3>
+                                    <p className="text-xs text-emerald-700">
+                                        Data quality optimized and synced automatically from Autonomous Agent pipeline.
+                                    </p>
+                                </div>
+                            </div>
+                            {cleaningResult.timestamp && (
+                                <span className="text-[11px] font-mono text-emerald-700 self-start sm:self-auto">
+                                    {new Date(cleaningResult.timestamp).toLocaleTimeString()}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Metric Highlights */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                            <div className="bg-white/90 rounded-xl p-3 border border-emerald-100 text-center">
+                                <span className="text-[10px] uppercase font-bold text-slate-500">Quality Score</span>
+                                <div className="flex items-center justify-center gap-1.5 mt-1">
+                                    <span className="text-slate-400 line-through text-xs">{cleaningResult.quality_before}%</span>
+                                    <ArrowRight size={12} className="text-emerald-500" />
+                                    <span className="text-lg font-black text-emerald-600">{cleaningResult.quality_after}%</span>
+                                </div>
+                            </div>
+
+                            <div className="bg-white/90 rounded-xl p-3 border border-emerald-100 text-center">
+                                <span className="text-[10px] uppercase font-bold text-slate-500">Missing Imputed</span>
+                                <div className="flex items-center justify-center gap-1.5 mt-1">
+                                    <span className="text-slate-400 line-through text-xs">{cleaningResult.missing_resolved}</span>
+                                    <ArrowRight size={12} className="text-emerald-500" />
+                                    <span className="text-lg font-black text-emerald-600">0</span>
+                                </div>
+                            </div>
+
+                            <div className="bg-white/90 rounded-xl p-3 border border-emerald-100 text-center">
+                                <span className="text-[10px] uppercase font-bold text-slate-500">Duplicates Cleared</span>
+                                <div className="flex items-center justify-center gap-1.5 mt-1">
+                                    <span className="text-slate-400 line-through text-xs">{cleaningResult.duplicates_removed}</span>
+                                    <ArrowRight size={12} className="text-emerald-500" />
+                                    <span className="text-lg font-black text-emerald-600">0</span>
+                                </div>
+                            </div>
+
+                            <div className="bg-white/90 rounded-xl p-3 border border-emerald-100 text-center">
+                                <span className="text-[10px] uppercase font-bold text-slate-500">Columns</span>
+                                <div className="flex items-center justify-center gap-1.5 mt-1">
+                                    <span className="text-slate-400 text-xs">{cleaningResult.columns_before} cols</span>
+                                    <ArrowRight size={12} className="text-indigo-500" />
+                                    <span className="text-lg font-black text-indigo-600">{cleaningResult.columns_after} cols</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Executed Remediation Actions */}
+                        {cleaningResult.changes && cleaningResult.changes.length > 0 && (
+                            <div className="bg-white/80 rounded-xl p-3 border border-emerald-100 space-y-1 text-xs">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-900 block mb-1">
+                                    Autonomous Actions Executed:
+                                </span>
+                                {cleaningResult.changes.map((ch, i) => (
+                                    <div key={i} className="flex items-center gap-2 text-emerald-900">
+                                        <Check size={13} className="text-emerald-600 shrink-0" />
+                                        <span>{ch}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 <h2 className="text-xl font-bold text-slate-800 mb-4">Current Data State</h2>
 
                 {/* Missing Values Chart/List */}

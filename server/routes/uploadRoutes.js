@@ -4,5 +4,6 @@ const uploadController = require('../controllers/uploadController');
 
 router.post('/', uploadController.uploadFile);
 router.delete('/cleanup', uploadController.cleanupFile);
+router.post('/cleanup', uploadController.cleanupFile);
 
 module.exports = router;

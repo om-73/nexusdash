@@ -4,7 +4,7 @@ import { api } from '../services/api';
 import { Plus, Trash2, Play, Info, Zap, TrendingUp, Filter, GitBranch, Wand2, Network, Sparkles, Database, Calculator, BarChart2 } from 'lucide-react';
 
 export default function FeatureEngineering() {
-    const { dataSummary, dataPreview, refreshData } = useData();
+    const { dataSummary, dataPreview, refreshData, featureEngineeringResult } = useData();
     const [features, setFeatures] = useState([]);
     const [activeTab, setActiveTab] = useState('transform');
     const [currentFeature, setCurrentFeature] = useState({
@@ -421,6 +421,83 @@ export default function FeatureEngineering() {
                     </button>
                 </div>
             </div>
+
+            {/* Autonomous / Cross-Page Feature Engineering Result Banner */}
+            {featureEngineeringResult && (
+                <div className="bg-gradient-to-r from-indigo-50/90 via-purple-50/50 to-slate-50 border border-indigo-200/80 rounded-2xl p-5 shadow-sm space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100 pb-3">
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-sm">
+                                <Sparkles size={16} />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-bold text-indigo-950 flex items-center gap-2">
+                                    Autonomous Feature Synthesis Synced
+                                    <span className="bg-indigo-100 text-indigo-800 text-[10px] font-mono px-2 py-0.5 rounded-full border border-indigo-300">
+                                        +{featureEngineeringResult.total_synthetic || featureEngineeringResult.transformations?.length || 0} Features
+                                    </span>
+                                </h3>
+                                <p className="text-xs text-indigo-700">
+                                    Synthesized non-linear interactions, temporal components, and normalizations from Autonomous Agent.
+                                </p>
+                            </div>
+                        </div>
+                        {featureEngineeringResult.timestamp && (
+                            <span className="text-[11px] font-mono text-indigo-600 self-start sm:self-auto">
+                                Synced {new Date(featureEngineeringResult.timestamp).toLocaleTimeString()}
+                            </span>
+                        )}
+                    </div>
+
+                    {/* AI Strategy Explanation */}
+                    <div className="bg-white/80 rounded-xl p-3.5 border border-indigo-100 space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-900 block">
+                            Strategy & Mathematical Intuition:
+                        </span>
+                        <p className="text-xs text-slate-700 leading-relaxed">
+                            {featureEngineeringResult.explanation || (
+                                "The Autonomous Agent analyzed feature distribution spaces, normalized positively skewed variables, decomposed temporal cycles, and synthesized bivariate ratio interactions."
+                            )}
+                        </p>
+                    </div>
+
+                    {/* Transformation Cards */}
+                    {featureEngineeringResult.transformations && featureEngineeringResult.transformations.length > 0 && (
+                        <div className="space-y-2.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block">
+                                Engineered Features Registry ({featureEngineeringResult.transformations.length})
+                            </span>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {featureEngineeringResult.transformations.map((t, idx) => (
+                                    <div key={idx} className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-xs space-y-2">
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                            <span className="font-mono font-bold text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                                {t.name || t.feature}
+                                            </span>
+                                            <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider bg-purple-50 text-purple-700 border border-purple-200">
+                                                {t.type || 'Custom'}
+                                            </span>
+                                        </div>
+
+                                        <div className="text-[10px] font-mono text-slate-500">
+                                            Formula: <code className="text-indigo-600 font-semibold">{t.formula || 'Custom'}</code>
+                                        </div>
+
+                                        <div className="text-xs text-slate-600 leading-snug">
+                                            <span className="font-semibold text-slate-700">Why: </span>
+                                            {t.rationale}
+                                        </div>
+
+                                        <div className="text-[11px] text-emerald-700 font-medium bg-emerald-50/60 p-1.5 rounded border border-emerald-100">
+                                            Impact: {t.impact}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
                 {/* Main Content Area */}

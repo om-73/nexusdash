@@ -37,94 +37,231 @@ def get_state():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def _read_single_file_to_df(file_path: str, file_type: str = "csv") -> pd.DataFrame:
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext in [".xlsx", ".xls"]:
+        file_type = "excel"
+    elif ext == ".zip":
+        file_type = "zip"
+
+    if file_type == "csv":
+        sep = ','
+        try:
+            import csv
+            encodings = ['utf-8', 'latin1', 'cp1252', 'ISO-8859-1']
+            sample = ""
+            for enc in encodings:
+                try:
+                    with open(file_path, 'r', encoding=enc) as f:
+                        sample = f.read(2048)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            if not sample:
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    sample = f.read(2048)
+            dialect = csv.Sniffer().sniff(sample)
+            sep = dialect.delimiter
+        except Exception as e:
+            print(f"Sniffer failed, falling back to default sep: {e}")
+
+        try:
+            try:
+                df = pd.read_csv(file_path, sep=sep)
+            except UnicodeDecodeError:
+                df = pd.read_csv(file_path, sep=sep, encoding='latin1')
+            except Exception:
+                try:
+                    df = pd.read_csv(file_path)
+                except UnicodeDecodeError:
+                    df = pd.read_csv(file_path, encoding='latin1')
+        except Exception:
+            df = pd.read_csv(file_path, sep=sep, engine='python', encoding_errors='replace')
+
+        if len(df.columns) == 1 and sep == ',':
+            try:
+                df_tab = pd.read_csv(file_path, sep='\t')
+                if len(df_tab.columns) > 1:
+                    df = df_tab
+                else:
+                    df_auto = pd.read_csv(file_path, sep=None, engine='python')
+                    if len(df_auto.columns) > 1:
+                        df = df_auto
+            except Exception as e:
+                print(f"Fallback retry failed: {e}")
+        return df
+
+    elif file_type in ["xlsx", "excel"]:
+        return pd.read_excel(file_path)
+    elif file_type == "zip":
+        try:
+            return pd.read_csv(file_path, compression='zip')
+        except Exception:
+            import zipfile
+            with zipfile.ZipFile(file_path, 'r') as z:
+                csv_files = [f for f in z.namelist() if f.endswith('.csv')]
+                if not csv_files:
+                    raise HTTPException(status_code=400, detail="No CSV file found inside the zip archive.")
+                with z.open(csv_files[0]) as f:
+                    return pd.read_csv(f)
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
 @router.post("/load")
 def load_data(request: FileLoadRequest):
-    if not os.path.exists(request.file_path):
-        raise HTTPException(status_code=404, detail="File not found")
     try:
-        if request.file_type == "csv":
-            # Auto-detect delimiter logic
-            sep = ','
-            try:
-                import csv
-                # Try reading with utf-8 first
-                encodings = ['utf-8', 'latin1', 'cp1252', 'ISO-8859-1']
-                sample = ""
-                for enc in encodings:
-                    try:
-                        with open(request.file_path, 'r', encoding=enc) as f:
-                            sample = f.read(2048)
+        # Multi-file load / combine
+        if request.file_paths and len(request.file_paths) > 1:
+            dfs = []
+            valid_paths = []
+            for fp in request.file_paths:
+                if os.path.exists(fp):
+                    loaded_df = _read_single_file_to_df(fp, request.file_type)
+                    # Clean and strip column names to avoid whitespace mismatch
+                    loaded_df.columns = [str(c).strip() for c in loaded_df.columns]
+                    dfs.append(loaded_df)
+                    valid_paths.append(fp)
+            if not dfs:
+                raise HTTPException(status_code=404, detail="None of the specified files could be found.")
+
+            combine_mode = (request.combine_method or "auto").lower()
+            join_key = request.join_key.strip() if request.join_key else None
+
+            # Calculate schema overlap between dataframes
+            all_col_sets = [set(d.columns) for d in dfs]
+            shared_all = set.intersection(*all_col_sets)
+            pairwise_overlap = all_col_sets[0].intersection(all_col_sets[1])
+            min_cols = min(len(all_col_sets[0]), len(all_col_sets[1]))
+            overlap_ratio = len(pairwise_overlap) / max(1, min_cols)
+
+            df = None
+
+            # -------------------------------------------------------------
+            # Mode 1: Explicit or Auto Relational Key Join ("merge")
+            # -------------------------------------------------------------
+            target_key = join_key
+            if not target_key and combine_mode in ["auto", "merge"] and shared_all:
+                for cand in shared_all:
+                    c_low = cand.lower()
+                    if any(k in c_low for k in ["id", "key", "code", "account", "user", "username", "email", "platform", "date"]):
+                        target_key = cand
                         break
-                    except UnicodeDecodeError:
-                        continue
-                
-                if not sample:
-                    with open(request.file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                         sample = f.read(2048)
+                if not target_key and len(shared_all) == 1:
+                    target_key = list(shared_all)[0]
 
-                dialect = csv.Sniffer().sniff(sample)
-                sep = dialect.delimiter
-            except Exception as e:
-                print(f"Sniffer failed, falling back to default sep: {e}")
-            
-            try:
-                try:
-                    df = pd.read_csv(request.file_path, sep=sep)
-                except UnicodeDecodeError:
-                    print("UTF-8 read failed, trying latin1")
-                    df = pd.read_csv(request.file_path, sep=sep, encoding='latin1')
-                except Exception:
-                     try:
-                         df = pd.read_csv(request.file_path)
-                     except UnicodeDecodeError:
-                         df = pd.read_csv(request.file_path, encoding='latin1')
+            if combine_mode == "merge" or (combine_mode == "auto" and target_key):
+                if target_key:
+                    df = dfs[0].copy()
+                    for idx, next_df in enumerate(dfs[1:], 1):
+                        next_copy = next_df.copy()
+                        k1 = next((c for c in df.columns if c.lower() == target_key.lower()), None)
+                        k2 = next((c for c in next_copy.columns if c.lower() == target_key.lower()), None)
+                        if k1 and k2:
+                            df[k1] = df[k1].astype(str).str.strip()
+                            next_copy[k2] = next_copy[k2].astype(str).str.strip()
+                            df = pd.merge(df, next_copy, left_on=k1, right_on=k2, how="outer", suffixes=("", f"_{idx+1}"))
+                            if k1 != k2 and k2 in df.columns:
+                                df.drop(columns=[k2], inplace=True)
+                        else:
+                            df = pd.concat([df.reset_index(drop=True), next_copy.reset_index(drop=True)], axis=1)
+                else:
+                    combine_mode = "columns"
 
-            except Exception as e:
-                print(f"All CSV load attempts failed, trying engine='python'")
-                df = pd.read_csv(request.file_path, sep=sep, engine='python', encoding_errors='replace')
-                
-            if len(df.columns) == 1 and sep == ',':
-                print("Detected single column with comma separator, retrying with tab/auto...")
-                try:
-                    df_tab = pd.read_csv(request.file_path, sep='\t')
-                    if len(df_tab.columns) > 1:
-                        df = df_tab
+            # -------------------------------------------------------------
+            # Mode 2: Horizontal Side-by-Side Merge ("columns", "side_by_side")
+            # Also selected by "auto" when schemas are disjoint (overlap_ratio < 0.4)
+            # -------------------------------------------------------------
+            if df is None and (combine_mode in ["columns", "side_by_side", "horizontal"] or (combine_mode == "auto" and overlap_ratio < 0.4)):
+                renamed_dfs = []
+                seen_cols = set()
+                for idx, d in enumerate(dfs):
+                    d_copy = d.reset_index(drop=True).copy()
+                    new_cols = []
+                    for c in d_copy.columns:
+                        if c in seen_cols:
+                            new_c = f"{c}_{idx+1}"
+                            new_cols.append(new_c)
+                            seen_cols.add(new_c)
+                        else:
+                            new_cols.append(c)
+                            seen_cols.add(c)
+                    d_copy.columns = new_cols
+                    renamed_dfs.append(d_copy)
+
+                max_len = max(len(d) for d in renamed_dfs)
+                aligned_dfs = []
+                for d in renamed_dfs:
+                    if len(d) < max_len:
+                        repeat_times = (max_len // len(d)) + 1
+                        padded = pd.concat([d] * repeat_times, ignore_index=True).iloc[:max_len]
+                        aligned_dfs.append(padded)
                     else:
-                        df_auto = pd.read_csv(request.file_path, sep=None, engine='python')
-                        if len(df_auto.columns) > 1:
-                            df = df_auto
-                except Exception as e:
-                    print(f"Fallback retry failed: {e}")
+                        aligned_dfs.append(d)
 
-        elif request.file_type in ["xlsx", "excel"]:
-            df = pd.read_excel(request.file_path)
-        elif request.file_type == "zip":
-            # Pandas can natively read `.zip` containing a single CSV
-            print(f"Detected zip file, attempting to load via pandas compression='zip'")
-            try:
-                df = pd.read_csv(request.file_path, compression='zip')
-            except Exception as e:
-                import zipfile
-                print(f"Pandas native zip read failed: {e}. Attempting manual extraction.")
-                with zipfile.ZipFile(request.file_path, 'r') as z:
-                    csv_files = [f for f in z.namelist() if f.endswith('.csv')]
-                    if not csv_files:
-                        raise HTTPException(status_code=400, detail="No CSV file found inside the zip archive.")
-                    with z.open(csv_files[0]) as f:
-                        df = pd.read_csv(f)
-        else:
-             raise HTTPException(status_code=400, detail="Unsupported file type")
-        
+                df = pd.concat(aligned_dfs, axis=1)
+
+            # -------------------------------------------------------------
+            # Mode 3: Vertical Row Union ("concat", "rows", "vertical")
+            # Used when schemas match (overlap_ratio >= 0.4)
+            # -------------------------------------------------------------
+            if df is None:
+                df = pd.concat(dfs, ignore_index=True)
+
+            # Ensure strictly unique column names across all combined dataframes
+            if df.columns.duplicated().any():
+                cols = pd.Series(df.columns)
+                for dup in df.columns[df.columns.duplicated()].unique():
+                    dup_indices = cols[cols == dup].index.tolist()
+                    for i, dup_idx in enumerate(dup_indices[1:], start=2):
+                        cols[dup_idx] = f"{dup}_{i}"
+                df.columns = cols
+
+            primary_path = valid_paths[0]
+            state.set_active_df(df)
+            state.reset_state(primary_path)
+            state.action_history.append(f"Loaded and combined {len(dfs)} datasets")
+
+            temp_id = hashlib.md5("".join(valid_paths).encode()).hexdigest()
+            snap_path = save_snapshot(df, temp_id)
+            metadata_store.register_dataset(temp_id, f"Combined ({len(dfs)} files)", "upload")
+            metadata_store.log_run(temp_id, df, snap_path)
+
+            summary = get_df_summary(df)
+            summary["is_combined"] = True
+            summary["combined_files_count"] = len(dfs)
+            return summary
+
+        # Single file load
+        file_path = request.file_path or (request.file_paths[0] if request.file_paths else None)
+        if not file_path or not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+
+        df = _read_single_file_to_df(file_path, request.file_type)
+        if df.columns.duplicated().any():
+            cols = pd.Series(df.columns)
+            for dup in df.columns[df.columns.duplicated()].unique():
+                dup_indices = cols[cols == dup].index.tolist()
+                for i, dup_idx in enumerate(dup_indices[1:], start=2):
+                    cols[dup_idx] = f"{dup}_{i}"
+            df.columns = cols
+
         state.set_active_df(df)
-        state.reset_state(request.file_path)
+        state.reset_state(file_path)
         state.action_history.append("Loaded Data")
-        
-        temp_id = hashlib.md5(request.file_path.encode()).hexdigest()
+
+        temp_id = hashlib.md5(file_path.encode()).hexdigest()
         snap_path = save_snapshot(df, temp_id)
-        metadata_store.register_dataset(temp_id, os.path.basename(request.file_path), "upload")
+        metadata_store.register_dataset(temp_id, os.path.basename(file_path), "upload")
         metadata_store.log_run(temp_id, df, snap_path)
-        
+
         return get_df_summary(df)
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

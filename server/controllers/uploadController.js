@@ -18,9 +18,9 @@ const storage = multer.diskStorage({
     }
 });
 
-const upload = multer({
+const uploadHandler = multer({
     storage: storage,
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+    limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
     fileFilter: (req, file, cb) => {
         const ext = path.extname(file.originalname).toLowerCase();
         const mimeType = file.mimetype;
@@ -55,26 +55,38 @@ const upload = multer({
         console.error('[Error]', error);
         cb(new Error(error));
     }
-}).single('file'); // 'file' is the key name
+}).any(); // Accepts single or multiple files under any field name
 
 exports.uploadFile = (req, res) => {
-    upload(req, res, (err) => {
+    uploadHandler(req, res, (err) => {
         if (err) {
             console.error('[Error] Upload validation failed:', err.message);
             return res.status(400).json({ error: err.message });
         }
-        if (!req.file) {
+        
+        const files = req.files || (req.file ? [req.file] : []);
+        if (files.length === 0) {
             console.error('[Error] No file provided in request');
-            return res.status(400).json({ error: 'Please select a file to upload' });
+            return res.status(400).json({ error: 'Please select at least one file to upload' });
         }
 
-        // Return file info
+        const uploadedFiles = files.map(file => ({
+            filePath: file.path,
+            filename: file.filename,
+            originalName: file.originalname,
+            size: file.size
+        }));
+
+        const primary = uploadedFiles[0];
         const responseData = {
-            message: 'File uploaded successfully',
-            filePath: req.file.path,
-            filename: req.file.filename,
-            originalName: req.file.originalname,
-            size: req.file.size
+            message: files.length > 1 ? `${files.length} files uploaded successfully` : 'File uploaded successfully',
+            files: uploadedFiles,
+            count: files.length,
+            // Backwards compatibility for single-file consumers:
+            filePath: primary.filePath,
+            filename: primary.filename,
+            originalName: primary.originalName,
+            size: primary.size
         };
         console.log('[Debug] Upload Success:', responseData);
         res.json(responseData);
@@ -83,7 +95,16 @@ exports.uploadFile = (req, res) => {
 
 exports.cleanupFile = async (req, res) => {
     try {
-        const { filePath } = req.body;
+        let filePath = req.body?.filePath;
+        if (!filePath && typeof req.body === 'string') {
+            try {
+                filePath = JSON.parse(req.body).filePath;
+            } catch (e) {}
+        }
+        if (!filePath && req.query?.filePath) {
+            filePath = req.query.filePath;
+        }
+
         if (!filePath) {
             return res.status(400).json({ error: 'filePath parameter is missing' });
         }
@@ -96,10 +117,13 @@ exports.cleanupFile = async (req, res) => {
             return res.status(403).json({ error: 'Access denied: File must reside in uploads directory' });
         }
 
-        await deleteFileImmediately(filePath);
-        res.json({ message: 'File deleted automatically' });
+        if (fs.existsSync(resolvedPath)) {
+            await deleteFileImmediately(resolvedPath);
+            return res.json({ message: 'File deleted automatically' });
+        }
+        res.json({ message: 'File already deleted or not found' });
     } catch (err) {
         console.error('[Error] Cleanup failed:', err.message);
         res.status(500).json({ error: 'Failed to delete file' });
     }
-};;
+};

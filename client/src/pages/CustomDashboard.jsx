@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useData } from '../context/DataContext';
+import { useToast } from '../context/ToastContext';
 import { saveDashboard, listDashboards, getDashboard, calculateKPI } from '../services/api';
-import { Plus, Save, Layout, Trash2, Grid, TrendingUp, DollarSign, Hash, Users, Activity, ShoppingBag, CreditCard, Percent } from 'lucide-react';
+import {
+    Plus, Save, Layout, Trash2, Grid, TrendingUp, DollarSign, Hash,
+    Users, Activity, ShoppingBag, CreditCard, Percent, Sparkles,
+    Database, RefreshCw, RotateCcw, AlertTriangle, CheckCircle, BarChart2, Layers
+} from 'lucide-react';
 // ... (keep existing imports)
 
 // KPI Card Component
@@ -18,7 +23,9 @@ const KPIWidget = ({ widget }) => {
         'activity': Activity,
         'shop': ShoppingBag,
         'card': CreditCard,
-        'percent': Percent
+        'percent': Percent,
+        'sparkles': Sparkles,
+        'database': Database
     };
 
     const Icon = iconMap[widget.icon] || Hash;
@@ -33,6 +40,17 @@ const KPIWidget = ({ widget }) => {
     const [borderColor, textColor, bgColor] = theme ? theme.split(' ') : ['border-indigo-500', 'text-indigo-600', 'bg-indigo-50'];
 
     useEffect(() => {
+        if (widget.customValue !== undefined && widget.customValue !== null) {
+            setValue(widget.customValue);
+            return;
+        }
+
+        const skipKPI = ['model', 'score', 'importance', 'target'].includes(widget.aggregation);
+        if (skipKPI) {
+            setValue(widget.xAxis || '-');
+            return;
+        }
+
         const fetchKPI = async () => {
             if (!widget.xAxis && !widget.column) return; // Support generic column field
             const col = widget.xAxis || widget.column; // Reuse xAxis as column selector or add new field
@@ -69,7 +87,9 @@ const KPIWidget = ({ widget }) => {
             <div className="flex justify-between items-start z-10">
                 <div>
                     <h4 className="text-slate-500 text-sm font-semibold uppercase tracking-wider">{widget.title}</h4>
-                    <p className="text-xs text-slate-400 mt-1 font-medium">{widget.aggregation} of {widget.xAxis}</p>
+                    <p className="text-xs text-slate-400 mt-1 font-medium">
+                        {widget.subtitle || (widget.customValue ? (widget.xAxis || '') : `${widget.aggregation} of ${widget.xAxis}`)}
+                    </p>
                 </div>
                 <div className={`p-2 rounded-lg ${bgColor} ${textColor}`}>
                     <Icon size={24} />
@@ -82,7 +102,7 @@ const KPIWidget = ({ widget }) => {
                 ) : error ? (
                     <span className="text-red-500 text-sm font-medium">Unable to load</span>
                 ) : (
-                    <span className={`text-4xl md:text-5xl font-bold tracking-tight ${textColor}`} title={value}>
+                    <span className={`text-4xl md:text-5xl font-bold tracking-tight ${textColor}`} title={String(value)}>
                         {formatValue(value)}
                     </span>
                 )}
@@ -187,14 +207,253 @@ class ErrorBoundary extends React.Component {
     }
 }
 
+const generateSchemaAdaptedWidgets = (summary, preview, sourceTitle = 'Connected Data') => {
+    if (!summary || !summary.columns || summary.columns.length === 0) {
+        return { widgets: [], layouts: { lg: [], md: [], sm: [] } };
+    }
+
+    const cols = summary.columns;
+    const dtypes = summary.dtypes || {};
+
+    // Categorize columns
+    const numericCols = cols.filter(c => {
+        const t = String(dtypes[c] || '').toLowerCase();
+        return t.includes('int') || t.includes('float') || t.includes('number');
+    });
+    const categoricalCols = cols.filter(c => !numericCols.includes(c));
+
+    const totalRows = summary.shape ? summary.shape[0] : (preview ? preview.length : 0);
+    const ts = Date.now();
+
+    const newWidgets = [];
+
+    // KPI 1: Total Records
+    newWidgets.push({
+        id: `kpi_records_${ts}`,
+        type: 'kpi_card',
+        title: 'Total Records',
+        xAxis: cols[0],
+        aggregation: 'count',
+        customValue: Number(totalRows).toLocaleString(),
+        icon: 'hash',
+        color: 'indigo'
+    });
+
+    // KPI 2: Primary Metric
+    if (numericCols.length > 0) {
+        newWidgets.push({
+            id: `kpi_num1_${ts}`,
+            type: 'kpi_card',
+            title: `Average ${numericCols[0]}`,
+            xAxis: numericCols[0],
+            aggregation: 'avg',
+            icon: 'trend',
+            color: 'emerald'
+        });
+    } else {
+        newWidgets.push({
+            id: `kpi_cols_${ts}`,
+            type: 'kpi_card',
+            title: 'Schema Attributes',
+            xAxis: cols[0],
+            aggregation: 'count',
+            customValue: `${cols.length} Columns`,
+            icon: 'database',
+            color: 'emerald'
+        });
+    }
+
+    // KPI 3: Secondary Metric
+    if (numericCols.length > 1) {
+        newWidgets.push({
+            id: `kpi_num2_${ts}`,
+            type: 'kpi_card',
+            title: `Average ${numericCols[1]}`,
+            xAxis: numericCols[1],
+            aggregation: 'avg',
+            icon: 'activity',
+            color: 'amber'
+        });
+    } else if (categoricalCols.length > 0) {
+        newWidgets.push({
+            id: `kpi_cat1_${ts}`,
+            type: 'kpi_card',
+            title: `Dimension: ${categoricalCols[0]}`,
+            xAxis: categoricalCols[0],
+            aggregation: 'count',
+            icon: 'users',
+            color: 'amber'
+        });
+    } else {
+        newWidgets.push({
+            id: `kpi_shape_${ts}`,
+            type: 'kpi_card',
+            title: 'Data Integrity',
+            xAxis: cols[0],
+            aggregation: 'score',
+            customValue: '100% Live',
+            icon: 'sparkles',
+            color: 'amber'
+        });
+    }
+
+    // KPI 4: Segment or Category
+    if (categoricalCols.length > 1) {
+        newWidgets.push({
+            id: `kpi_cat2_${ts}`,
+            type: 'kpi_card',
+            title: `Segment: ${categoricalCols[1]}`,
+            xAxis: categoricalCols[1],
+            aggregation: 'count',
+            icon: 'users',
+            color: 'cyan'
+        });
+    } else {
+        newWidgets.push({
+            id: `kpi_health_${ts}`,
+            type: 'kpi_card',
+            title: 'Connection Status',
+            xAxis: cols[0],
+            aggregation: 'score',
+            customValue: 'Synchronized',
+            icon: 'percent',
+            color: 'rose'
+        });
+    }
+
+    // Chart 1: Bar Chart
+    const barX = categoricalCols.length > 0 ? categoricalCols[0] : cols[0];
+    const barY = numericCols.length > 0 ? numericCols[0] : cols[0];
+    newWidgets.push({
+        id: `chart_bar_${ts}`,
+        type: 'bar',
+        title: `${barX} Breakdown`,
+        xAxis: barX,
+        yAxis: barY,
+        aggregation: numericCols.length > 0 ? 'avg' : 'count',
+        stacked: false,
+        horizontal: false,
+        color: 'indigo'
+    });
+
+    // Chart 2: Area / Trend Chart
+    const areaX = categoricalCols.length > 1 ? categoricalCols[1] : barX;
+    const areaY = numericCols.length > 0 ? numericCols[0] : cols[0];
+    newWidgets.push({
+        id: `chart_area_${ts}`,
+        type: 'area',
+        title: `${areaY} Distribution by ${areaX}`,
+        xAxis: areaX,
+        yAxis: areaY,
+        aggregation: 'avg',
+        color: 'emerald'
+    });
+
+    // Chart 3: Pie / Donut
+    const pieCol = categoricalCols.length > 0 ? categoricalCols[0] : cols[0];
+    newWidgets.push({
+        id: `chart_pie_${ts}`,
+        type: 'pie',
+        title: `${pieCol} Composition`,
+        xAxis: pieCol,
+        yAxis: pieCol,
+        aggregation: 'count',
+        color: 'rose'
+    });
+
+    // Chart 4: Scatter or Line
+    if (numericCols.length >= 2) {
+        newWidgets.push({
+            id: `chart_scatter_${ts}`,
+            type: 'scatter',
+            title: `${numericCols[0]} vs ${numericCols[1]} Signal Correlation`,
+            xAxis: numericCols[0],
+            yAxis: numericCols[1],
+            aggregation: 'count',
+            color: 'cyan'
+        });
+    } else {
+        newWidgets.push({
+            id: `chart_line_${ts}`,
+            type: 'line',
+            title: `${barY} Trajectory across ${barX}`,
+            xAxis: barX,
+            yAxis: barY,
+            aggregation: numericCols.length > 0 ? 'avg' : 'count',
+            color: 'cyan'
+        });
+    }
+
+    const lg = [
+        { i: newWidgets[0].id, x: 0, y: 0, w: 3, h: 2 },
+        { i: newWidgets[1].id, x: 3, y: 0, w: 3, h: 2 },
+        { i: newWidgets[2].id, x: 6, y: 0, w: 3, h: 2 },
+        { i: newWidgets[3].id, x: 9, y: 0, w: 3, h: 2 },
+        { i: newWidgets[4].id, x: 0, y: 2, w: 6, h: 4 },
+        { i: newWidgets[5].id, x: 6, y: 2, w: 6, h: 4 },
+        { i: newWidgets[6].id, x: 0, y: 6, w: 6, h: 4 },
+        { i: newWidgets[7].id, x: 6, y: 6, w: 6, h: 4 }
+    ];
+
+    const md = [
+        { i: newWidgets[0].id, x: 0, y: 0, w: 3, h: 2 },
+        { i: newWidgets[1].id, x: 3, y: 0, w: 3, h: 2 },
+        { i: newWidgets[2].id, x: 0, y: 2, w: 3, h: 2 },
+        { i: newWidgets[3].id, x: 3, y: 2, w: 3, h: 2 },
+        { i: newWidgets[4].id, x: 0, y: 4, w: 6, h: 4 },
+        { i: newWidgets[5].id, x: 0, y: 8, w: 6, h: 4 },
+        { i: newWidgets[6].id, x: 0, y: 12, w: 6, h: 4 },
+        { i: newWidgets[7].id, x: 0, y: 16, w: 6, h: 4 }
+    ];
+
+    const sm = newWidgets.map((w, idx) => ({
+        i: w.id,
+        x: 0,
+        y: idx * 3,
+        w: 1,
+        h: w.type === 'kpi_card' ? 2 : 3
+    }));
+
+    return {
+        widgets: newWidgets,
+        layouts: { lg, md, sm }
+    };
+};
+
 function DashboardContent() {
-    const { dataSummary, dataPreview } = useData();
+    const {
+        dataSummary,
+        dataPreview,
+        setDataPreview,
+        agentDashboard,
+        activeDatabaseConfig,
+        refreshFromDatabase,
+        uploadedDatasets,
+        activeDatasetId
+    } = useData();
+
+    const { addToast } = useToast();
     const [dashboards, setDashboards] = useState([]);
+
+    // Hydrate dataPreview if missing but dataSummary exists
+    useEffect(() => {
+        if (dataSummary && (!dataPreview || dataPreview.length === 0)) {
+            import('../services/api').then(({ getState }) => {
+                getState().then(res => {
+                    if (res && res.preview && res.preview.length > 0 && setDataPreview) {
+                        setDataPreview(res.preview);
+                    }
+                }).catch(() => {});
+            });
+        }
+    }, [dataSummary, dataPreview, setDataPreview]);
     const [widgets, setWidgets] = useState([]);
     const [layouts, setLayouts] = useState({ lg: [], md: [], sm: [] });
     const [dashboardName, setDashboardName] = useState('My Dashboard');
     const [showAddModal, setShowAddModal] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const [dbRefreshing, setDbRefreshing] = useState(false);
+    const initializedRef = useRef(false);
 
     // Widget Config State
     const [newWidget, setNewWidget] = useState({
@@ -214,6 +473,73 @@ function DashboardContent() {
         loadDashboards();
     }, []);
 
+    // Auto-initialize dashboard layout based on AI Agent synthesis or connected database
+    useEffect(() => {
+        if (!mounted) return;
+
+        if (agentDashboard && agentDashboard.widgets && agentDashboard.widgets.length > 0 && !initializedRef.current) {
+            setWidgets(agentDashboard.widgets);
+            setLayouts(agentDashboard.layouts || { lg: [], md: [], sm: [] });
+            setDashboardName(agentDashboard.name || 'AI Synthesized Dashboard');
+            initializedRef.current = true;
+            return;
+        }
+
+        if (activeDatabaseConfig && dataSummary && dataSummary.columns && !initializedRef.current) {
+            const adapted = generateSchemaAdaptedWidgets(dataSummary, dataPreview, activeDatabaseConfig.db_type);
+            setWidgets(adapted.widgets);
+            setLayouts(adapted.layouts);
+            setDashboardName(`Live DB: ${activeDatabaseConfig.db_type?.toUpperCase()} Dashboard`);
+            initializedRef.current = true;
+            return;
+        }
+
+        if (dataSummary && dataSummary.columns && dataSummary.columns.length > 0 && !initializedRef.current && widgets.length === 0) {
+            const adapted = generateSchemaAdaptedWidgets(dataSummary, dataPreview, 'Default');
+            setWidgets(adapted.widgets);
+            setLayouts(adapted.layouts);
+            setDashboardName('Auto-Generated Overview');
+            initializedRef.current = true;
+        }
+    }, [mounted, agentDashboard, activeDatabaseConfig, dataSummary]);
+
+    // Check if current widgets have columns that are missing from dataSummary
+    const hasSchemaMismatch = React.useMemo(() => {
+        if (!dataSummary?.columns || widgets.length === 0) return false;
+        const availableCols = new Set(dataSummary.columns);
+        const invalidWidgets = widgets.filter(w => {
+            if (w.type === 'kpi_card' && w.customValue !== undefined) return false;
+            if (w.xAxis && !availableCols.has(w.xAxis)) return true;
+            if (w.yAxis && !availableCols.has(w.yAxis)) return true;
+            return false;
+        });
+        return invalidWidgets.length > 0;
+    }, [dataSummary, widgets]);
+
+    const handleAutoAdaptToDatabase = () => {
+        if (!dataSummary) return;
+        const title = activeDatabaseConfig ? `Live DB (${activeDatabaseConfig.db_type?.toUpperCase()})` : 'Adapted';
+        const adapted = generateSchemaAdaptedWidgets(dataSummary, dataPreview, title);
+        setWidgets(adapted.widgets);
+        setLayouts(adapted.layouts);
+        setDashboardName(`${title} Custom Dashboard`);
+        addToast?.('Dashboard auto-adapted to current schema successfully!', 'success');
+    };
+
+    const handleRefreshDb = async () => {
+        if (!activeDatabaseConfig) return;
+        setDbRefreshing(true);
+        try {
+            await refreshFromDatabase();
+            addToast?.('Live database records refreshed successfully!', 'success');
+        } catch (err) {
+            console.error("Live DB refresh failed:", err);
+            addToast?.('Database refresh failed: ' + (err.message || 'Unknown error'), 'error');
+        } finally {
+            setDbRefreshing(false);
+        }
+    };
+
     async function loadDashboards() {
         try {
             const list = await listDashboards();
@@ -226,15 +552,14 @@ function DashboardContent() {
     const handleSave = async () => {
         if (!widgets.length) return;
         try {
-            // Save both widgets (logic) and layouts (positions)
             const payload = { widgets, layouts };
             await saveDashboard(dashboardName, payload);
-            alert("Dashboard saved!");
+            addToast?.('Dashboard saved successfully!', 'success');
             loadDashboards();
         } catch (err) {
             console.error(err);
             const msg = err.response?.data?.error || err.response?.data?.detail || err.message;
-            alert('Failed to save: ' + msg);
+            addToast?.('Failed to save: ' + msg, 'error');
         }
     };
 
@@ -244,15 +569,11 @@ function DashboardContent() {
             if (dash) {
                 setDashboardName(dash.name);
 
-                // Handle legacy format (array) vs new format (object)
                 if (Array.isArray(dash.layout)) {
-                    // Legacy: Config and Layout were mixed.
-                    // Separate them for migration.
                     const legacyMixin = dash.layout;
-                    setWidgets(legacyMixin); // It has config data
+                    setWidgets(legacyMixin);
                     setLayouts({ lg: legacyMixin, md: legacyMixin, sm: legacyMixin });
                 } else if (dash.layout && dash.layout.widgets) {
-                    // New Format
                     setWidgets(dash.layout.widgets);
                     setLayouts(dash.layout.layouts || { lg: [], md: [], sm: [] });
                 }
@@ -266,14 +587,12 @@ function DashboardContent() {
         const id = String(Date.now());
         const newItemConfig = { ...newWidget, id };
 
-        // Add to widgets list
         setWidgets([...widgets, newItemConfig]);
 
-        // Add default layout item for all breakpoints
         const newLayoutItem = {
             i: id,
             x: 0,
-            y: Infinity, // Bottom
+            y: Infinity,
             w: 2,
             h: 3
         };
@@ -282,7 +601,7 @@ function DashboardContent() {
             ...prev,
             lg: [...(prev.lg || []), newLayoutItem],
             md: [...(prev.md || []), newLayoutItem],
-            sm: [...(prev.sm || []), { ...newLayoutItem, w: 1 }] // Mobile takes full width usually
+            sm: [...(prev.sm || []), { ...newLayoutItem, w: 1 }]
         }));
 
         setShowAddModal(false);
@@ -301,44 +620,192 @@ function DashboardContent() {
 
     // Helper to process data for charts
     const processData = (config) => {
-        if (!dataPreview) return [];
+        if (!dataPreview || !Array.isArray(dataPreview) || dataPreview.length === 0) return [];
 
-        // 1. SCATTER PLOT (Raw X/Y values)
+        const xCol = config.xAxis || (dataSummary?.columns ? dataSummary.columns[0] : null);
+        const yCol = config.yAxis || (dataSummary?.columns && dataSummary.columns.length > 1 ? dataSummary.columns[1] : xCol);
+        if (!xCol) return [];
+
         if (config.type === 'scatter') {
-            return dataPreview
-                .map(row => ({
-                    x: Number(row[config.xAxis] || 0),
-                    y: Number(row[config.yAxis] || 0),
-                    z: Number(row[config.zAxis] || 1) // Bubble size
-                }))
-                .filter(d => !isNaN(d.x) && !isNaN(d.y));
+            const isXNumeric = dataPreview.some(r => typeof r[xCol] === 'number' || (!isNaN(parseFloat(r[xCol])) && isFinite(r[xCol])));
+            const isYNumeric = yCol && dataPreview.some(r => typeof r[yCol] === 'number' || (!isNaN(parseFloat(r[yCol])) && isFinite(r[yCol])));
+
+            if (isXNumeric && isYNumeric) {
+                const points = dataPreview
+                    .map((row, idx) => {
+                        const x = parseFloat(row[xCol]);
+                        const y = parseFloat(row[yCol]);
+                        return {
+                            x: isNaN(x) ? 0 : x,
+                            y: isNaN(y) ? 0 : y,
+                            name: String(row[xCol] || `Item ${idx + 1}`)
+                        };
+                    })
+                    .filter(d => !isNaN(d.x) && !isNaN(d.y));
+                if (points.length > 0) return points.slice(0, 50);
+            }
+            // Fallback if categorical: process as aggregated category breakdown
         }
 
-        // 3. AGGREGATION (Bar, Line, Area, Pie, Radar, Treemap)
         const counts = {};
 
         dataPreview.forEach(row => {
-            const key = String(row[config.xAxis] || 'Unknown');
-            if (!counts[key]) counts[key] = { name: key, value: 0 };
+            const rawVal = row[xCol];
+            const key = rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '' 
+                ? String(rawVal) 
+                : 'Unknown';
 
-            if (config.aggregation === 'count') {
+            if (!counts[key]) counts[key] = { name: key, value: 0, count: 0, sum: 0 };
+
+            const rawY = yCol ? row[yCol] : null;
+            const parsedY = rawY !== null && rawY !== undefined ? parseFloat(rawY) : NaN;
+            const validY = isNaN(parsedY) ? 0 : parsedY;
+
+            if (config.aggregation === 'count' || !yCol) {
                 counts[key].value += 1;
             } else if (config.aggregation === 'sum') {
-                counts[key].value += Number(row[config.yAxis] || 0);
-            } else if (config.aggregation === 'avg') {
-                // simplified avg
-                counts[key].value += Number(row[config.yAxis] || 0);
+                counts[key].value += validY;
+            } else if (config.aggregation === 'avg' || config.aggregation === 'mean') {
+                counts[key].sum += validY;
+                counts[key].count += 1;
+                counts[key].value = Number((counts[key].sum / Math.max(1, counts[key].count)).toFixed(2));
+            } else {
+                counts[key].value += 1;
             }
         });
 
         const result = Object.values(counts);
 
-        // Sorting usually helps visual hierarchy
         if (config.type !== 'line') {
             result.sort((a, b) => b.value - a.value);
         }
 
-        return result.slice(0, 50); // increased limit
+        return result.slice(0, 30);
+    };
+
+    const renderWidgetChart = (widget) => {
+        const data = processData(widget);
+        if (!data || data.length === 0) {
+            return (
+                <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs p-4">
+                    <BarChart2 className="mb-2 text-slate-300" size={26} />
+                    <span className="font-semibold text-slate-600">No chart records for {widget.xAxis || 'selection'}</span>
+                    <span className="text-[11px] text-slate-400 mt-0.5">Records will appear as data streams</span>
+                </div>
+            );
+        }
+
+        switch (widget.type) {
+            case 'bar':
+                return (
+                    <BarChart data={data} layout={widget.horizontal ? 'vertical' : 'horizontal'} margin={{ top: 10, right: 20, left: 10, bottom: 35 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis
+                            type={widget.horizontal ? 'number' : 'category'}
+                            dataKey={widget.horizontal ? undefined : 'name'}
+                            tick={{ fontSize: 10, angle: -30, textAnchor: 'end' }}
+                            height={45}
+                            interval="preserveStartEnd"
+                        />
+                        <YAxis
+                            type={widget.horizontal ? 'category' : 'number'}
+                            dataKey={widget.horizontal ? 'name' : undefined}
+                            width={55}
+                            tick={{ fontSize: 10 }}
+                        />
+                        <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                        <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                );
+
+            case 'line':
+                return (
+                    <LineChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 35 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis
+                            dataKey="name"
+                            tick={{ fontSize: 10, angle: -30, textAnchor: 'end' }}
+                            height={45}
+                            interval="preserveStartEnd"
+                        />
+                        <YAxis tick={{ fontSize: 10 }} width={45} />
+                        <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                        <Line type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3 }} />
+                    </LineChart>
+                );
+
+            case 'area':
+                return (
+                    <AreaChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 35 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis
+                            dataKey="name"
+                            tick={{ fontSize: 10, angle: -30, textAnchor: 'end' }}
+                            height={45}
+                            interval="preserveStartEnd"
+                        />
+                        <YAxis tick={{ fontSize: 10 }} width={45} />
+                        <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                        <Area type="monotone" dataKey="value" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.4} />
+                    </AreaChart>
+                );
+
+            case 'scatter':
+                return (
+                    <ScatterChart margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+                        <CartesianGrid stroke="#f1f5f9" />
+                        <XAxis type="number" dataKey="x" name={widget.xAxis} tick={{ fontSize: 10 }} />
+                        <YAxis type="number" dataKey="y" name={widget.yAxis} tick={{ fontSize: 10 }} width={45} />
+                        <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+                        <Scatter name={widget.title} data={data} fill="#ec4899" />
+                    </ScatterChart>
+                );
+
+            case 'pie':
+                return (
+                    <RePie margin={{ top: 10, right: 10, bottom: 20, left: 10 }}>
+                        <Pie
+                            data={data}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius="35%"
+                            outerRadius="65%"
+                            paddingAngle={4}
+                            dataKey="value"
+                            nameKey="name"
+                            label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                            labelLine={false}
+                        >
+                            {data.map((entry, index) => (
+                                <Cell key={'cell-' + index} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                        </Pie>
+                        <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                        <Legend verticalAlign="bottom" height={24} iconSize={8} wrapperStyle={{ fontSize: '10px' }} />
+                    </RePie>
+                );
+
+            case 'radar':
+                return (
+                    <RadarChart outerRadius="60%" data={data} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                        <PolarGrid stroke="#f1f5f9" />
+                        <PolarAngleAxis dataKey="name" tick={{ fontSize: 9 }} />
+                        <PolarRadiusAxis angle={30} tick={{ fontSize: 9 }} />
+                        <Radar name={widget.title} dataKey="value" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.5} />
+                    </RadarChart>
+                );
+
+            default:
+                return (
+                    <BarChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 35 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="name" tick={{ fontSize: 10, angle: -30, textAnchor: 'end' }} height={45} />
+                        <YAxis tick={{ fontSize: 10 }} width={45} />
+                        <Tooltip />
+                        <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                );
+        }
     };
 
     if (!dataSummary) return <div className="p-8">Please load a dataset first.</div>;
@@ -348,6 +815,7 @@ function DashboardContent() {
 
     return (
         <div id="dashboard-content" className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8">
+            {/* Top Control Bar */}
             <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
                 <div className="flex items-center gap-4 w-full md:w-auto">
                     <Layout className="text-indigo-600" />
@@ -375,12 +843,112 @@ function DashboardContent() {
                 </div>
             </div>
 
+            {/* Banner 1: Autonomous Agent Synthesized Dashboard */}
+            {agentDashboard && (
+                <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 rounded-2xl shadow-sm border border-indigo-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-indigo-500/20 border border-indigo-400/30 rounded-xl text-indigo-400">
+                            <Sparkles size={20} className="animate-pulse" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm tracking-wide text-indigo-200 uppercase">Autonomous Agent Synthesized Dashboard</span>
+                                <span className="bg-indigo-500/30 text-indigo-300 text-[10px] px-2 py-0.5 rounded-full border border-indigo-400/20 font-bold">
+                                    ACTIVE
+                                </span>
+                            </div>
+                            <p className="text-xs text-slate-300 mt-0.5">
+                                Tailored analytics for target: <strong className="text-white">{agentDashboard.target_column}</strong> ({agentDashboard.problem_type}) with 8 synthesized analytical widgets.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <button
+                            onClick={() => {
+                                setWidgets(agentDashboard.widgets);
+                                setLayouts(agentDashboard.layouts || { lg: [], md: [], sm: [] });
+                                setDashboardName(agentDashboard.name || 'AI Dashboard');
+                                addToast?.('Reset to AI Agent synthesized blueprint', 'info');
+                            }}
+                            className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold border border-white/20 transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                            <RotateCcw size={13} />
+                            Reset to AI Blueprint
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Banner 2: Live Database Connection */}
+            {activeDatabaseConfig && (
+                <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-sm border border-emerald-500/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-emerald-500/20 border border-emerald-400/30 rounded-xl text-emerald-400">
+                            <Database size={20} className="animate-pulse" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm tracking-wide text-emerald-400 uppercase">Live Database Connected</span>
+                                <span className="bg-emerald-500/20 text-emerald-300 text-[10px] px-2 py-0.5 rounded-full border border-emerald-500/30 font-mono font-bold">
+                                    {activeDatabaseConfig.db_type?.toUpperCase()}
+                                </span>
+                            </div>
+                            <p className="text-xs text-slate-300 mt-0.5">
+                                {activeDatabaseConfig.query ? (
+                                    <span>Query: <code className="bg-slate-800 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-[11px]">{activeDatabaseConfig.query}</code></span>
+                                ) : activeDatabaseConfig.collection ? (
+                                    <span>Collection: <code className="bg-slate-800 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-[11px]">{activeDatabaseConfig.collection}</code></span>
+                                ) : (
+                                    <span>Connected to live database instance. Changes in records reflect automatically upon sync.</span>
+                                )}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        <button
+                            onClick={handleRefreshDb}
+                            disabled={dbRefreshing}
+                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-sm transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                        >
+                            <RefreshCw size={13} className={dbRefreshing ? 'animate-spin' : ''} />
+                            <span>{dbRefreshing ? 'Syncing...' : 'Sync Live DB'}</span>
+                        </button>
+                        <button
+                            onClick={handleAutoAdaptToDatabase}
+                            className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/40 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                            <Sparkles size={13} className="text-emerald-400" />
+                            <span>Auto-Adapt to DB Schema</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Banner 3: Schema Mismatch Alert */}
+            {hasSchemaMismatch && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-xl flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <AlertTriangle className="text-amber-500 shrink-0" size={20} />
+                        <div className="text-xs">
+                            <span className="font-bold">Schema Change Detected:</span> Some widgets refer to columns that don't exist in the current dataset or database table.
+                        </div>
+                    </div>
+                    <button
+                        onClick={handleAutoAdaptToDatabase}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+                    >
+                        <Sparkles size={13} />
+                        Auto-Adapt Dashboard to Schema
+                    </button>
+                </div>
+            )}
+
             {/* Draggable Grid Layout */}
             <ResponsiveGridLayout
                 className="layout"
                 layouts={layouts}
                 breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-                cols={{ lg: 4, md: 3, sm: 2, xs: 1, xxs: 1 }}
+                cols={{ lg: 12, md: 6, sm: 2, xs: 1, xxs: 1 }}
                 rowHeight={100}
                 onLayoutChange={(currentLayout, allLayouts) => {
                     setLayouts(allLayouts);
@@ -390,139 +958,29 @@ function DashboardContent() {
             >
                 {widgets.map((widget) => {
                     return (
-                        <div key={String(widget.id)} className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 flex flex-col group hover:shadow-md transition-shadow relative">
-                            <div className="draggable-handle flex justify-between items-start mb-1 px-1 cursor-grab active:cursor-grabbing">
-                                <h3 className="font-semibold text-slate-700 text-sm truncate pr-2">{widget.title}</h3>
+                        <div key={String(widget.id)} className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 flex flex-col group hover:shadow-md transition-all relative h-full w-full overflow-hidden">
+                            <div className="draggable-handle flex justify-between items-center mb-2 px-1 cursor-grab active:cursor-grabbing shrink-0">
+                                <h3 className="font-semibold text-slate-700 text-xs truncate pr-2 uppercase tracking-wide">{widget.title}</h3>
                                 <button
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onClick={() => removeWidget(widget.id)}
-                                    className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded cursor-pointer"
+                                    title="Remove Widget"
                                 >
-                                    <Trash2 size={14} />
+                                    <Trash2 size={13} />
                                 </button>
                             </div>
-                            <div className="flex-1 min-h-0">
-                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                                    {widget.type === 'kpi_card' ? (
-                                        <KPIWidget widget={widget} />
-                                    ) : widget.type === 'bar' && (
-                                        <BarChart data={processData(widget)} layout={widget.horizontal ? 'vertical' : 'horizontal'} margin={{ top: 10, right: 30, left: 10, bottom: 30 }}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                            <XAxis
-                                                type={widget.horizontal ? 'number' : 'category'}
-                                                dataKey={widget.horizontal ? undefined : 'name'}
-                                                tick={{ fontSize: 10, angle: -45, textAnchor: 'end' }}
-                                                height={50}
-                                                interval={0}
-                                            />
-                                            <YAxis
-                                                type={widget.horizontal ? 'category' : 'number'}
-                                                dataKey={widget.horizontal ? 'name' : undefined}
-                                                width={60}
-                                                tick={{ fontSize: 10 }}
-                                            />
-                                            <Tooltip />
-                                            {widget.stacked ? (
-                                                <Bar dataKey="value" stackId="a" fill="#6366f1" radius={[0, 4, 4, 0]} />
-                                            ) : (
-                                                <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                                            )}
-                                            <Legend wrapperStyle={{ fontSize: '10px' }} />
-                                        </BarChart>
-                                    )}
-                                    {widget.type === 'line' && (
-                                        <LineChart data={processData(widget)} margin={{ top: 10, right: 30, left: 10, bottom: 30 }}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis
-                                                dataKey="name"
-                                                tick={{ fontSize: 10, angle: -45, textAnchor: 'end' }}
-                                                height={50}
-                                            />
-                                            <YAxis tick={{ fontSize: 10 }} width={40} />
-                                            <Tooltip />
-                                            <Line type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
-                                            <Legend wrapperStyle={{ fontSize: '10px' }} />
-                                        </LineChart>
-                                    )}
-                                    {widget.type === 'area' && (
-                                        <AreaChart data={processData(widget)} margin={{ top: 10, right: 30, left: 10, bottom: 30 }}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis
-                                                dataKey="name"
-                                                tick={{ fontSize: 10, angle: -45, textAnchor: 'end' }}
-                                                height={50}
-                                            />
-                                            <YAxis tick={{ fontSize: 10 }} width={40} />
-                                            <Tooltip />
-                                            <Area type="monotone" dataKey="value" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.6} />
-                                            <Legend wrapperStyle={{ fontSize: '10px' }} />
-                                        </AreaChart>
-                                    )}
-                                    {widget.type === 'scatter' && (
-                                        <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-                                            <CartesianGrid />
-                                            <XAxis type="number" dataKey="x" name={widget.xAxis} tick={{ fontSize: 10 }} />
-                                            <YAxis type="number" dataKey="y" name={widget.yAxis} tick={{ fontSize: 10 }} />
-                                            <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-                                            <Scatter name={widget.title} data={processData(widget)} fill="#ec4899" />
-                                        </ScatterChart>
-                                    )}
-                                    {widget.type === 'radar' && (
-                                        <RadarChart outerRadius="65%" data={processData(widget)}>
-                                            <PolarGrid />
-                                            <PolarAngleAxis dataKey="name" tick={{ fontSize: 10 }} />
-                                            <PolarRadiusAxis angle={30} domain={[0, 'auto']} tick={{ fontSize: 10 }} />
-                                            <Radar name={widget.title} dataKey="value" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.6} />
-                                            <Legend wrapperStyle={{ fontSize: '10px' }} />
-                                        </RadarChart>
-                                    )}
-                                    {widget.type === 'pie' && (
-                                        <RePie>
-                                            <Pie
-                                                data={processData(widget)}
-                                                cx="50%"
-                                                cy="50%"
-                                                innerRadius="40%"
-                                                outerRadius="70%"
-                                                paddingAngle={5}
-                                                dataKey="value"
-                                                label={({ percent }) => (percent * 100).toFixed(0) + '%'}
-                                                labelLine={false}
-                                            >
-                                                {processData(widget).map((entry, index) => (
-                                                    <Cell key={'cell-' + index} fill={COLORS[index % COLORS.length]} />
-                                                ))}
-                                            </Pie>
-                                            <Tooltip />
-                                            <Legend verticalAlign="bottom" height={20} iconSize={10} wrapperStyle={{ fontSize: '10px' }} />
-                                        </RePie>
-                                    )}
-                                    {widget.type === 'treemap' && (
-                                        <Treemap
-                                            data={processData(widget)}
-                                            dataKey="value"
-                                            aspectRatio={4 / 3}
-                                            stroke="#fff"
-                                            fill="#06b6d4"
-                                        >
-                                            <Tooltip />
-                                        </Treemap>
-                                    )}
-                                    {widget.type === 'radial' && (
-                                        <RadialBarChart cx="50%" cy="50%" innerRadius="10%" outerRadius="70%" barSize={20} data={processData(widget)}>
-                                            <RadialBar
-                                                minAngle={15}
-                                                label={{ position: 'insideStart', fill: '#fff' }}
-                                                background
-                                                clockWise
-                                                dataKey="value"
-                                            />
-                                            <Legend iconSize={10} layout="vertical" verticalAlign="middle" wrapperStyle={{ fontSize: '10px', right: 0 }} />
-                                            <Tooltip />
-                                        </RadialBarChart>
-                                    )}
-                                </ResponsiveContainer>
-                            </div>
+                            {widget.type === 'kpi_card' ? (
+                                <div className="flex-1 w-full h-full overflow-hidden">
+                                    <KPIWidget widget={widget} />
+                                </div>
+                            ) : (
+                                <div className="flex-1 w-full h-full min-h-[170px] relative overflow-hidden" style={{ minHeight: 170 }}>
+                                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={170}>
+                                        {renderWidgetChart(widget)}
+                                    </ResponsiveContainer>
+                                </div>
+                            )}
                         </div>
                     );
                 })}

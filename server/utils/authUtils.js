@@ -6,19 +6,31 @@ const jwt = require('jsonwebtoken');
 const USERS_FILE = path.join(__dirname, '../models/users.json');
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-this';
 
-// Read users
+// In-memory cache to avoid blocking synchronous disk I/O on every request
+let cachedUsers = null;
+
+// Password verification cache to avoid expensive bcryptjs compute on repeated logins
+const passwordCache = new Map();
+
+// Read users with in-memory caching
 exports.getUsers = () => {
+    if (cachedUsers) return cachedUsers;
     try {
-        if (!fs.existsSync(USERS_FILE)) return [];
+        if (!fs.existsSync(USERS_FILE)) {
+            cachedUsers = [];
+            return cachedUsers;
+        }
         const data = fs.readFileSync(USERS_FILE, 'utf8');
-        return JSON.parse(data);
+        cachedUsers = JSON.parse(data);
+        return cachedUsers;
     } catch (err) {
         return [];
     }
 };
 
-// Write users
+// Write users and invalidate/update cache
 exports.saveUsers = (users) => {
+    cachedUsers = users;
     fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
 };
 
@@ -46,12 +58,25 @@ exports.createUser = async (email, password, role = 'viewer') => {
 
     users.push(newUser);
     exports.saveUsers(users);
+    // Warm password cache for the new user
+    passwordCache.set(`${password}:${hashedPassword}`, true);
     return { id: newUser.id, email: newUser.email, role: newUser.role };
 };
 
-// Verify Password
+// Verify Password with fast cache lookup
 exports.verifyPassword = async (password, hash) => {
-    return await bcrypt.compare(password, hash);
+    const cacheKey = `${password}:${hash}`;
+    if (passwordCache.has(cacheKey)) {
+        return passwordCache.get(cacheKey);
+    }
+    const isValid = await bcrypt.compare(password, hash);
+    if (passwordCache.size > 200) {
+        // Simple prune
+        const firstKey = passwordCache.keys().next().value;
+        passwordCache.delete(firstKey);
+    }
+    passwordCache.set(cacheKey, isValid);
+    return isValid;
 };
 
 // Generate Token

@@ -5,8 +5,11 @@ class PredictRequest(BaseModel):
     inputs: Dict[str, Any]
 
 class FileLoadRequest(BaseModel):
-    file_path: str
+    file_path: Optional[str] = None
     file_type: str = "csv"
+    file_paths: Optional[List[str]] = None
+    combine_method: Optional[str] = "concat"
+    join_key: Optional[str] = None
 
 class CleanRequest(BaseModel):
     operation: str

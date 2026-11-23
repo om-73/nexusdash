@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Database, TrendingUp, AlertOctagon, Layers, Search, Sparkles, Upload, ArrowRight, Table2, AlertTriangle, Activity, FileText, CheckCircle, Bot } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { queryMachineLearning, getKPIs } from '../services/api';
-import SmartCharts from '../components/SmartCharts';
 import ReportGenerator from '../components/ReportGenerator';
 import KPIGrid from '../components/KPIGrid';
 
+const SmartCharts = React.lazy(() => import('../components/SmartCharts'));
+
 export default function Dashboard() {
     const { dataSummary, dataPreview } = useData();
+    const navigate = useNavigate();
     // Load saved KPIs from local storage or rely on effect to fetch defaults
     // Load saved KPIs from local storage
     const [kpis, setKpis] = useState(() => {
@@ -295,16 +297,31 @@ export default function Dashboard() {
                         type="text"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        placeholder="e.g. 'Show rows where age > 30' or 'Find customers from New York'"
-                        className="w-full px-6 py-4 rounded-full text-slate-800 focus:outline-none focus:ring-4 focus:ring-indigo-300 shadow-xl"
+                        placeholder="e.g. 'Predict Weekly_Sales' or 'Find key revenue drivers'..."
+                        className="w-full px-6 py-4 rounded-full text-slate-800 focus:outline-none focus:ring-4 focus:ring-indigo-300 shadow-xl pr-40 text-sm md:text-base"
                     />
-                    <button
-                        type="submit"
-                        disabled={queryLoading}
-                        className="absolute right-2 top-2 bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-full transition-colors disabled:opacity-50"
-                    >
-                        <Search size={24} />
-                    </button>
+                    <div className="absolute right-2 top-2 flex items-center gap-1.5">
+                        <button
+                            type="submit"
+                            disabled={queryLoading}
+                            title="Filter Data with Query"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white p-2.5 rounded-full transition-colors disabled:opacity-50 shadow-sm"
+                        >
+                            <Search size={20} />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const q = query.trim();
+                                navigate('/agent', { state: { initialQuery: q, autoRun: !!q } });
+                            }}
+                            title="Run Autonomous Agent on this query"
+                            className="bg-gradient-to-r from-amber-500 to-pink-500 hover:from-amber-600 hover:to-pink-600 text-white px-3.5 py-2 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-md transition hover:scale-105"
+                        >
+                            <Bot size={16} />
+                            <span>Run Agent</span>
+                        </button>
+                    </div>
                 </form>
 
                 {/* Query Results */}
@@ -338,7 +355,9 @@ export default function Dashboard() {
 
             {/* Smart Charts Section */}
             <div className="mb-8">
-                <SmartCharts />
+                <React.Suspense fallback={<div className="h-48 rounded-xl bg-slate-50 border border-slate-100 animate-pulse flex items-center justify-center text-slate-400 text-sm">Loading visual insights...</div>}>
+                    <SmartCharts />
+                </React.Suspense>
             </div>
 
             {/* Data Preview Modal / Table Preview */}

@@ -5,9 +5,9 @@ import { DataProvider } from './context/DataContext';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import Dashboard from './pages/Dashboard';
 
 const DataLoad = lazy(() => import('./pages/DataLoad'));
-const Dashboard = lazy(() => import('./pages/Dashboard'));
 const DataClean = lazy(() => import('./pages/DataClean'));
 const FeatureEngineering = lazy(() => import('./pages/FeatureEngineering'));
 const EDA = lazy(() => import('./pages/EDA'));

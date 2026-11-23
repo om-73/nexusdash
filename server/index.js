@@ -55,8 +55,11 @@ if (process.env.SPAWN_PYTHON === 'true') {
 
     // Start Python Engine Programmatically
     const pythonCwd = path.join(__dirname, '../data_engine');
-    // Use configured PYTHON_PATH or default to 'python' (Docker / most envs)
-    const pythonCmd = process.env.PYTHON_PATH || 'python';
+    const localVenvPython = path.join(pythonCwd, 'venv/bin/python');
+    // Prefer data_engine/venv/bin/python if it exists, otherwise fall back to PYTHON_PATH or 'python'
+    const pythonCmd = fs.existsSync(localVenvPython)
+        ? localVenvPython
+        : (process.env.PYTHON_PATH || 'python');
     const pythonProcess = spawn(pythonCmd, ['-m', 'uvicorn', 'app.main:app', '--host', '0.0.0.0', '--port', '8000'], {
         cwd: pythonCwd,
         env: { ...process.env, PYTHONUNBUFFERED: '1' }
@@ -198,13 +201,27 @@ app.post('/api/cleanup', async (req, res) => {
     }
 });
 
-// Serve static files from the React client
-app.use(express.static(path.join(__dirname, '../client/dist')));
+// Serve static files from the React client with optimized caching headers
+const clientDist = fs.existsSync(path.join(__dirname, '../client/dist'))
+    ? path.join(__dirname, '../client/dist')
+    : path.join(__dirname, '../dist');
+
+app.use(express.static(clientDist, {
+    maxAge: '1d',
+    setHeaders: (res, filePath) => {
+        if (filePath.includes(path.sep + 'assets' + path.sep)) {
+            // Hashed Vite chunks and assets are immutable - browser can load them in 0ms from disk cache
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        } else if (filePath.endsWith('.html')) {
+            // HTML should revalidate
+            res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+        }
+    }
+}));
 
 // Handle React routing, return all requests to React app
-// Handle React routing, return all requests to React app
 app.get(/(.*)/, (req, res) => {
-    const indexPath = path.join(__dirname, '../client/dist', 'index.html');
+    const indexPath = path.join(clientDist, 'index.html');
     if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath);
     } else {

@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { trainModel, configureAI, downloadModel } from '../services/api';
-import { Play, CheckCircle, BarChart2, Sparkles, Loader, Download } from 'lucide-react';
+import { Play, CheckCircle, BarChart2, Sparkles, Loader, Download, Award, Zap, ArrowRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function Model() {
-    const { dataSummary } = useData();
+    const { dataSummary, modelResult } = useData();
+    const navigate = useNavigate();
     const [config, setConfig] = useState({
         problem_type: 'regression',
         target_column: '',
@@ -17,6 +19,18 @@ export default function Model() {
     const [error, setError] = useState(null);
     const [aiGoal, setAiGoal] = useState('');
     const [aiLoading, setAiLoading] = useState(false);
+
+    useEffect(() => {
+        if (modelResult) {
+            if (modelResult.target_column) {
+                setConfig(prev => ({
+                    ...prev,
+                    target_column: modelResult.target_column,
+                    problem_type: modelResult.problem_type || 'regression'
+                }));
+            }
+        }
+    }, [modelResult]);
 
     if (!dataSummary) {
         return <div className="p-8 text-center text-slate-500">Please load data first.</div>;
@@ -351,12 +365,103 @@ export default function Model() {
 
             {/* Results Panel */}
             <div className="lg:col-span-2">
-                {!results ? (
+                {!results && !modelResult?.champion ? (
                     <div className="h-full flex items-center justify-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 p-12 text-center text-slate-400">
                         <div>
                             <BarChart2 size={48} className="mx-auto mb-4 opacity-50" />
                             <p>Configure and train a model to see results here.</p>
                         </div>
+                    </div>
+                ) : !results && modelResult?.champion ? (
+                    <div className="space-y-6">
+                        {/* Synced Champion Model Banner */}
+                        <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-6 rounded-2xl shadow-lg border border-indigo-800/40 space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-800/60 pb-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-amber-400/20 text-amber-400 border border-amber-400/30 flex items-center justify-center">
+                                        <Award size={22} />
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="font-bold text-base">Champion Model Synced from Autonomous Agent</h3>
+                                            <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-mono px-2 py-0.5 rounded-full border border-emerald-500/30">
+                                                Active Champion
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-indigo-200 mt-0.5">
+                                            Algorithm: <span className="font-bold text-white">{modelResult.champion.name}</span> • Target: <code className="text-amber-300 font-mono">{modelResult.target_column}</code>
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={handleDownloadModel}
+                                        className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2 px-3 rounded-lg flex items-center gap-1.5 transition"
+                                    >
+                                        <Download size={14} /> Download .pkl
+                                    </button>
+                                    <button
+                                        onClick={() => navigate('/predict')}
+                                        className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold py-2 px-3 rounded-lg flex items-center gap-1.5 transition"
+                                    >
+                                        <Zap size={14} /> Test in Predictions
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <div className="bg-slate-800/80 rounded-xl p-3 border border-slate-700">
+                                    <span className="text-[10px] uppercase font-bold text-slate-400">{modelResult.champion.metric_name || 'Primary Metric'}</span>
+                                    <p className="text-2xl font-black text-emerald-400 mt-0.5">{modelResult.champion.metric_value}</p>
+                                </div>
+                                {modelResult.champion.secondary_metric_name && (
+                                    <div className="bg-slate-800/80 rounded-xl p-3 border border-slate-700">
+                                        <span className="text-[10px] uppercase font-bold text-slate-400">{modelResult.champion.secondary_metric_name}</span>
+                                        <p className="text-2xl font-black text-white mt-0.5">{modelResult.champion.secondary_metric_value}</p>
+                                    </div>
+                                )}
+                                <div className="bg-slate-800/80 rounded-xl p-3 border border-slate-700">
+                                    <span className="text-[10px] uppercase font-bold text-slate-400">Inference Latency</span>
+                                    <p className="text-2xl font-black text-indigo-300 mt-0.5">{modelResult.champion.latency_ms || 0} ms</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Tournament Leaderboard */}
+                        {modelResult.tournament && modelResult.tournament.length > 0 && (
+                            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                                <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider flex items-center gap-2">
+                                    <Award size={16} className="text-indigo-600" />
+                                    AutoML Tournament Leaderboard
+                                </h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs text-left">
+                                        <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                                            <tr>
+                                                <th className="px-3 py-2.5">Rank & Model</th>
+                                                <th className="px-3 py-2.5">{modelResult.champion.metric_name || 'Score'}</th>
+                                                <th className="px-3 py-2.5">Secondary Metric</th>
+                                                <th className="px-3 py-2.5">Train Latency</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {modelResult.tournament.map((m, idx) => (
+                                                <tr key={idx} className={m.is_champion ? "bg-emerald-50/70 font-semibold text-emerald-950" : ""}>
+                                                    <td className="px-3 py-2.5 flex items-center gap-1.5">
+                                                        <span>#{idx + 1}</span>
+                                                        <span>{m.model_name}</span>
+                                                        {m.is_champion && <span className="bg-emerald-200 text-emerald-800 text-[9px] px-1.5 py-0.2 rounded font-bold">CHAMPION</span>}
+                                                    </td>
+                                                    <td className="px-3 py-2.5 font-bold text-emerald-600">{m.primary_metric}</td>
+                                                    <td className="px-3 py-2.5 text-slate-600">{m.secondary_metric || '-'}</td>
+                                                    <td className="px-3 py-2.5 font-mono text-slate-500">{m.latency_ms}ms</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <div className="space-y-6">

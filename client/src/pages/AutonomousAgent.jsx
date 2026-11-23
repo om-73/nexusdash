@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
 import {
@@ -13,7 +14,8 @@ import {
     Bot, Play, RotateCcw, Award, CheckCircle2, AlertCircle,
     ArrowRight, Terminal, BarChart3, Database, Sparkles, Cpu,
     Download, ShieldCheck, Zap, RefreshCw, Layers, TrendingUp,
-    Check, Copy, ChevronRight, Sliders, ExternalLink
+    Check, Copy, ChevronRight, Sliders, ExternalLink, FileText,
+    Loader2, FileDown, FolderKanban, LayoutDashboard
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -34,10 +36,17 @@ const SAMPLE_DATASETS = [
 ];
 
 export default function AutonomousAgent() {
-    const { dataSummary, setDataSummary, setDataPreview } = useData();
+    const { 
+        dataSummary, setDataSummary, setDataPreview, 
+        syncAgentRunResults, setPredictionResult: setGlobalPredictionResult,
+        uploadedDatasets, activeDatasetId, isUnifiedMode,
+        useAllFilesTogether, useFileSeparately 
+    } = useData();
     const { addToast } = useToast();
 
-    // Configuration State
+    const navigate = useNavigate();
+    const location = useLocation();
+    const [userQuery, setUserQuery] = useState(() => location.state?.initialQuery || '');
     const [selectedGoal, setSelectedGoal] = useState(GOAL_PRESETS[0].label);
     const [targetColumn, setTargetColumn] = useState('auto');
     const [speedMode, setSpeedMode] = useState('live'); // 'live' or 'turbo'
@@ -50,6 +59,7 @@ export default function AutonomousAgent() {
     const [visibleLogs, setVisibleLogs] = useState([]);
     const [terminalAutoScroll, setTerminalAutoScroll] = useState(true);
     const [copiedBrief, setCopiedBrief] = useState(false);
+    const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
     // Live Prediction State
     const [predictInputs, setPredictInputs] = useState({});
@@ -58,6 +68,22 @@ export default function AutonomousAgent() {
 
     const terminalEndRef = useRef(null);
     const streamingTimerRef = useRef(null);
+    const autoRunTriggered = useRef(false);
+
+    // Dynamic suggested queries based on active dataset columns
+    const suggestedQueries = React.useMemo(() => {
+        if (!dataSummary?.columns || dataSummary.columns.length === 0) return [];
+        const cols = dataSummary.columns;
+        const targetCol = (targetColumn !== 'auto' && cols.includes(targetColumn))
+            ? targetColumn
+            : cols[cols.length - 1];
+        return [
+            `Predict ${targetCol} with champion AutoML model`,
+            `Analyze top key drivers & explainability of ${targetCol}`,
+            `Clean data anomalies & optimize ${targetCol}`,
+            `Run full auto-pilot pipeline on ${targetCol}`
+        ];
+    }, [dataSummary, targetColumn]);
 
     // Scroll terminal to bottom
     useEffect(() => {
@@ -78,8 +104,8 @@ export default function AutonomousAgent() {
         if (dataSummary && dataSummary.columns && dataSummary.columns.length > 0) {
             if (targetColumn === 'auto' || !dataSummary.columns.includes(targetColumn)) {
                 // Find default candidate
-                const common = ['Churn', 'target', 'Target', 'SalePrice', 'price', 'Price', 'Attrition', 'left'];
-                const found = dataSummary.columns.find(c => common.includes(c));
+                const common = ['Churn', 'target', 'Target', 'SalePrice', 'price', 'Price', 'Attrition', 'left', 'Weekly_Sales', 'sales'];
+                const found = dataSummary.columns.find(c => common.some(cand => cand.toLowerCase() === c.toLowerCase()));
                 setTargetColumn(found || dataSummary.columns[dataSummary.columns.length - 1]);
             }
         }
@@ -96,6 +122,8 @@ export default function AutonomousAgent() {
             setAgentStatus('completed');
             setRunData(result);
             if (result.sample_inputs) setPredictInputs(result.sample_inputs);
+            syncAgentRunResults?.(result);
+            addToast('Autonomous Agent execution completed! Executive report ready to download.', 'success');
             return;
         }
 
@@ -122,7 +150,8 @@ export default function AutonomousAgent() {
                 setAgentStatus('completed');
                 setRunData(result);
                 if (result.sample_inputs) setPredictInputs(result.sample_inputs);
-                addToast('Autonomous Agent execution completed!', 'success');
+                syncAgentRunResults?.(result);
+                addToast('Autonomous Agent execution completed! Executive report ready to download.', 'success');
             }
         }, 120);
 
@@ -130,16 +159,20 @@ export default function AutonomousAgent() {
     };
 
     // Execute Autonomous Agent
-    const handleLaunchAgent = async () => {
+    const handleLaunchAgent = async (overrideQuery = null) => {
         setAgentStatus('running');
         setVisibleLogs([]);
         setCurrentStageIndex(0);
         setRunData(null);
         setPredictionResult(null);
 
+        const activeQuery = (typeof overrideQuery === 'string' && overrideQuery.trim())
+            ? overrideQuery.trim()
+            : (userQuery.trim() || selectedGoal);
+
         try {
             const payload = {
-                goal: selectedGoal,
+                goal: activeQuery,
                 target_column: targetColumn === 'auto' ? undefined : targetColumn,
                 problem_type: 'auto',
                 feature_engineering: true,
@@ -170,6 +203,14 @@ export default function AutonomousAgent() {
             }]);
         }
     };
+
+    // Auto-run if arrived from another page with initialQuery and autoRun
+    useEffect(() => {
+        if (!autoRunTriggered.current && location.state?.autoRun && location.state?.initialQuery && dataSummary) {
+            autoRunTriggered.current = true;
+            handleLaunchAgent(location.state.initialQuery);
+        }
+    }, [location.state, dataSummary]);
 
     // Load Sample Dataset and Auto-Run
     const handleLoadSample = async (datasetId) => {
@@ -208,7 +249,16 @@ export default function AutonomousAgent() {
         try {
             const res = await predictModel(predictInputs);
             setPredictionResult(res);
-            addToast('Prediction computed successfully!', 'success');
+            setGlobalPredictionResult?.(prev => ({
+                ...prev,
+                prediction: res.prediction,
+                sample_inputs: predictInputs,
+                model_name: runData?.champion_model?.name || prev?.model_name,
+                target_column: runData?.target_column || prev?.target_column,
+                problem_type: runData?.problem_type || prev?.problem_type,
+                timestamp: new Date().toISOString()
+            }));
+            addToast('Prediction computed successfully & synced to Prediction page!', 'success');
         } catch (err) {
             console.error('Prediction error:', err);
             addToast(`Prediction failed: ${err.response?.data?.error || err.message}`, 'error');
@@ -242,6 +292,516 @@ export default function AutonomousAgent() {
         setCopiedBrief(true);
         addToast('Executive brief copied to clipboard!', 'success');
         setTimeout(() => setCopiedBrief(false), 2500);
+    };
+
+    // Generate and Download Full Autonomous Agent Executive Report (PDF or Markdown)
+    const handleDownloadReport = async (format = 'pdf') => {
+        if (!runData) {
+            addToast('No agent execution results available to generate report.', 'error');
+            return;
+        }
+
+        setIsGeneratingReport(true);
+        try {
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const targetCol = runData.target_column || 'Target';
+            const problemType = (runData.problem_type || 'Machine Learning').toUpperCase();
+            const champ = runData.champion_model || {};
+            const diff = runData.data_diff || {};
+            const drivers = runData.feature_importance || [];
+            const recs = runData.recommendations || [];
+            const queryText = runData.query || userQuery || selectedGoal;
+            const fe = runData.feature_engineering || {};
+            const feTransformations = fe.transformations || [];
+            const feExplanation = fe.explanation || (
+                feTransformations.length > 0
+                    ? `The Autonomous Feature Engineering Engine synthesized ${fe.total_synthetic || feTransformations.length} new predictive signals across non-linear transforms, temporal seasonality, interaction ratios, and categorical mappings.`
+                    : 'The Autonomous Agent analyzed feature distributions, evaluated skewness, and prepared optimal encodings for machine learning modeling.'
+            );
+
+            if (format === 'markdown' || format === 'md') {
+                // Generate comprehensive Markdown document
+                let md = `# NexusDash Autonomous AI Agent - Executive Intelligence Report\n\n`;
+                md += `**Execution ID:** \`${runData.execution_id || 'N/A'}\`  \n`;
+                md += `**Generated Date:** ${new Date().toLocaleString()}  \n`;
+                md += `**Directive / User Query:** "${queryText}"  \n`;
+                md += `**Problem Type:** ${problemType}  \n`;
+                md += `**Target Column:** \`${targetCol}\`  \n`;
+                md += `**Pipeline Latency:** ${runData.total_duration_ms || 0} ms  \n\n`;
+
+                md += `---\n\n## 1. Executive Summary\n\n`;
+                md += `${runData.executive_summary || 'Autonomous agent successfully optimized dataset and crowned champion model.'}\n\n`;
+
+                md += `## 2. Champion Model & Tournament Performance\n\n`;
+                md += `- **Champion Model:** **${champ.name || 'AutoML Champion'}**\n`;
+                md += `- **Primary Metric (${champ.metric_name || 'Score'}):** **${champ.metric_value ?? 'N/A'}**\n`;
+                if (champ.secondary_metric_name) {
+                    md += `- **Secondary Metric (${champ.secondary_metric_name}):** **${champ.secondary_metric_value ?? 'N/A'}**\n`;
+                }
+                md += `- **Inference Latency:** ${champ.latency_ms || 0} ms\n\n`;
+
+                if (runData.tournament && runData.tournament.length > 0) {
+                    md += `### AutoML Tournament Leaderboard\n\n`;
+                    md += `| Rank | Model Algorithm | ${champ.metric_name || 'Primary Metric'} | Secondary Metric | Latency |\n`;
+                    md += `|---|---|---|---|---|\n`;
+                    runData.tournament.forEach((m, idx) => {
+                        md += `| #${idx + 1} | ${m.model_name}${m.is_champion ? ' 🏆 (Champion)' : ''} | ${m.primary_metric} | ${m.secondary_metric || '-'} | ${m.latency_ms}ms |\n`;
+                    });
+                    md += `\n`;
+                }
+
+                md += `## 3. Data Quality & Self-Healing Audit\n\n`;
+                if (diff.before && diff.after) {
+                    md += `| Audit Dimension | Pre-Run (Raw) | Post-Run (Engineered) | Status |\n`;
+                    md += `|---|---|---|---|\n`;
+                    md += `| **Overall Quality Score** | ${diff.before.quality_score}% | **${diff.after.quality_score}%** | Improved |\n`;
+                    md += `| **Row Count** | ${diff.before.rows?.toLocaleString?.() ?? diff.before.rows} | ${diff.after.rows?.toLocaleString?.() ?? diff.after.rows} | Validated |\n`;
+                    md += `| **Feature Columns** | ${diff.before.columns} | ${diff.after.columns} | Engineered |\n`;
+                    md += `| **Missing Cell Count** | ${diff.before.missing_cells} | **${diff.after.missing_cells}** | Repaired |\n`;
+                    md += `| **Duplicate Rows** | ${diff.before.duplicate_rows} | **${diff.after.duplicate_rows}** | Cleared |\n\n`;
+                }
+
+                if (diff.changes && diff.changes.length > 0) {
+                    md += `**Automated Remediation Actions:**\n`;
+                    diff.changes.forEach(c => {
+                        md += `- ${c}\n`;
+                    });
+                    md += `\n`;
+                }
+
+                md += `## 4. Autonomous Feature Engineering & Transformation Explanations\n\n`;
+                md += `### Strategy & Mathematical Intuition\n\n`;
+                md += `${feExplanation}\n\n`;
+
+                if (feTransformations.length > 0) {
+                    md += `### Feature Transformation Registry & Explanations\n\n`;
+                    md += `| Engineered Feature | Transformation Type | Source Column(s) | Mathematical Formula | Why Applied (Rationale) | Statistical Impact |\n`;
+                    md += `|---|---|---|---|---|---|\n`;
+                    feTransformations.forEach(t => {
+                        const srcs = Array.isArray(t.source_columns) ? t.source_columns.join(', ') : (t.source_columns || '-');
+                        md += `| \`${t.name || t.feature}\` | ${t.type || 'Custom'} | \`${srcs}\` | \`${t.formula || 'Custom'}\` | ${t.rationale || '-'} | ${t.impact || '-'} |\n`;
+                    });
+                    md += `\n`;
+                }
+
+                md += `## 5. Top Key Feature Drivers\n\n`;
+                if (drivers.length > 0) {
+                    md += `| Rank | Feature Dimension | Relative Contribution (%) |\n`;
+                    md += `|---|---|---|\n`;
+                    drivers.slice(0, 10).forEach((d, idx) => {
+                        md += `| #${idx + 1} | \`${d.feature}\` | ${d.percentage}% |\n`;
+                    });
+                    md += `\n`;
+                }
+
+                md += `## 6. Strategic Business Recommendations\n\n`;
+                if (recs.length > 0) {
+                    recs.forEach((r, idx) => {
+                        md += `${idx + 1}. **${r}**\n`;
+                    });
+                } else {
+                    md += `- Deploy the champion model into the operational inference pipeline.\n`;
+                }
+
+                md += `\n---\n*Report generated autonomously by NexusDash AI Engine.*`;
+
+                const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `nexus_agent_report_${targetCol}_${timestamp.slice(0, 10)}.md`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                addToast('Executive report downloaded (.md)', 'success');
+            } else {
+                // High-fidelity vector PDF generation
+                const jspdfModule = await import('jspdf');
+                const jsPDF = jspdfModule.jsPDF || jspdfModule.default?.jsPDF || jspdfModule.default;
+                const doc = new jsPDF('p', 'mm', 'a4');
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const pageHeight = doc.internal.pageSize.getHeight();
+                const margin = 16;
+                const contentWidth = pageWidth - margin * 2;
+                let y = 16;
+
+                const checkPageBreak = (neededHeight) => {
+                    if (y + neededHeight > pageHeight - 16) {
+                        doc.addPage();
+                        y = 18;
+                    }
+                };
+
+                // Header Top Bar
+                doc.setFillColor(15, 23, 42); // slate-900
+                doc.rect(margin, y, contentWidth, 24, 'F');
+
+                doc.setTextColor(255, 255, 255);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(14);
+                doc.text('NEXUSDASH AUTONOMOUS AI AGENT', margin + 6, y + 9);
+
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(8.5);
+                doc.setTextColor(148, 163, 184); // slate-400
+                doc.text('EXECUTIVE MACHINE LEARNING & DATA INTELLIGENCE DOSSIER', margin + 6, y + 15.5);
+
+                doc.setTextColor(56, 189, 248); // sky-400
+                doc.setFontSize(7.5);
+                doc.text(`CONFIDENTIAL • RUN ID: ${String(runData.execution_id || 'AUTO-RUN').slice(0, 24)}`, margin + 6, y + 21);
+
+                y += 29;
+
+                // Meta Info Grid Card
+                doc.setFillColor(248, 250, 252); // slate-50
+                doc.setDrawColor(226, 232, 240); // slate-200
+                doc.roundedRect(margin, y, contentWidth, 19, 2, 2, 'FD');
+
+                doc.setFontSize(7.5);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(100, 116, 139);
+
+                doc.text('TARGET VARIABLE', margin + 4, y + 5.5);
+                doc.text('PROBLEM TYPE', margin + 55, y + 5.5);
+                doc.text('PIPELINE TIME', margin + 105, y + 5.5);
+                doc.text('DATE GENERATED', margin + 145, y + 5.5);
+
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(8.5);
+                doc.setTextColor(15, 23, 42);
+                doc.text(String(targetCol).slice(0, 24), margin + 4, y + 13);
+                doc.text(String(problemType).slice(0, 22), margin + 55, y + 13);
+                doc.text(`${runData.total_duration_ms || 0} ms`, margin + 105, y + 13);
+                doc.text(new Date().toLocaleDateString(), margin + 145, y + 13);
+
+                y += 24;
+
+                // Directive / User Goal
+                if (queryText) {
+                    checkPageBreak(16);
+                    doc.setFontSize(8);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(79, 70, 229); // indigo-600
+                    doc.text('AGENT DIRECTIVE / GOAL:', margin, y);
+                    y += 4.5;
+
+                    doc.setFont('helvetica', 'italic');
+                    doc.setFontSize(8.5);
+                    doc.setTextColor(51, 65, 85);
+                    const splitQuery = doc.splitTextToSize(`"${queryText}"`, contentWidth);
+                    doc.text(splitQuery, margin, y);
+                    y += splitQuery.length * 4.2 + 5;
+                }
+
+                // Section 1: Executive Summary
+                checkPageBreak(28);
+                doc.setFillColor(238, 242, 255); // indigo-50
+                doc.setDrawColor(199, 210, 254);
+                doc.roundedRect(margin, y, contentWidth, 6, 1, 1, 'FD');
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9);
+                doc.setTextColor(49, 46, 129); // indigo-900
+                doc.text('1. EXECUTIVE SUMMARY & SYNTHESIS', margin + 4, y + 4.2);
+                y += 9.5;
+
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(8.5);
+                doc.setTextColor(51, 65, 85);
+                const summaryLines = doc.splitTextToSize(runData.executive_summary || 'Autonomous agent successfully optimized dataset and trained predictive model.', contentWidth);
+                doc.text(summaryLines, margin, y);
+                y += summaryLines.length * 4.2 + 6;
+
+                // Section 2: Champion Model & Tournament
+                checkPageBreak(38);
+                doc.setFillColor(240, 253, 244); // emerald-50
+                doc.setDrawColor(187, 247, 208);
+                doc.roundedRect(margin, y, contentWidth, 6, 1, 1, 'FD');
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9);
+                doc.setTextColor(20, 83, 45); // emerald-900
+                doc.text('2. CHAMPION MODEL & AUTOML TOURNAMENT', margin + 4, y + 4.2);
+                y += 9.5;
+
+                // Champion highlight card
+                doc.setFillColor(248, 250, 252);
+                doc.setDrawColor(203, 213, 225);
+                doc.roundedRect(margin, y, contentWidth, 18, 2, 2, 'FD');
+
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9.5);
+                doc.setTextColor(15, 23, 42);
+                doc.text(`CROWNED CHAMPION: ${champ.name || 'Automated Best Model'}`, margin + 4, y + 6);
+
+                doc.setFontSize(8);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(71, 85, 105);
+                doc.text(`${champ.metric_name || 'Primary Metric'}:`, margin + 4, y + 13);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(16, 185, 129); // emerald-600
+                doc.text(String(champ.metric_value ?? 'N/A'), margin + 34, y + 13);
+
+                if (champ.secondary_metric_name) {
+                    doc.setFont('helvetica', 'normal');
+                    doc.setTextColor(71, 85, 105);
+                    doc.text(`${champ.secondary_metric_name}:`, margin + 70, y + 13);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(15, 23, 42);
+                    doc.text(String(champ.secondary_metric_value ?? 'N/A'), margin + 98, y + 13);
+                }
+
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(71, 85, 105);
+                doc.text(`Inference Latency:`, margin + 130, y + 13);
+                doc.setFont('helvetica', 'bold');
+                doc.text(`${champ.latency_ms || 0} ms`, margin + 158, y + 13);
+
+                y += 23;
+
+                // Tournament Leaderboard Mini Table
+                if (runData.tournament && runData.tournament.length > 0) {
+                    checkPageBreak(runData.tournament.length * 6 + 10);
+                    doc.setFontSize(8);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(71, 85, 105);
+                    doc.text('Tournament Leaderboard (Ranked):', margin, y);
+                    y += 4.5;
+
+                    // Table Header
+                    doc.setFillColor(241, 245, 249);
+                    doc.rect(margin, y, contentWidth, 5, 'F');
+                    doc.setFontSize(7.5);
+                    doc.setTextColor(100, 116, 139);
+                    doc.text('RANK & MODEL', margin + 4, y + 3.5);
+                    doc.text(String(champ.metric_name || 'PRIMARY METRIC').toUpperCase(), margin + 80, y + 3.5);
+                    doc.text('SECONDARY METRIC', margin + 120, y + 3.5);
+                    doc.text('TRAIN TIME', margin + 155, y + 3.5);
+                    y += 5;
+
+                    runData.tournament.forEach((m, i) => {
+                        checkPageBreak(6);
+                        doc.setFont('helvetica', m.is_champion ? 'bold' : 'normal');
+                        doc.setFontSize(7.5);
+                        doc.setTextColor(m.is_champion ? 16 : 51, m.is_champion ? 185 : 65, m.is_champion ? 129 : 85);
+                        doc.text(`#${i + 1}  ${m.model_name}${m.is_champion ? ' (CHAMPION)' : ''}`, margin + 4, y + 3.8);
+                        doc.text(String(m.primary_metric), margin + 80, y + 3.8);
+                        doc.text(String(m.secondary_metric || '-'), margin + 120, y + 3.8);
+                        doc.text(`${m.latency_ms} ms`, margin + 155, y + 3.8);
+
+                        doc.setDrawColor(241, 245, 249);
+                        doc.line(margin, y + 4.8, margin + contentWidth, y + 4.8);
+                        y += 5.2;
+                    });
+                    y += 4;
+                }
+
+                // Section 3: Data Quality & Self-Healing Audit
+                if (diff.before && diff.after) {
+                    checkPageBreak(38);
+                    doc.setFillColor(243, 244, 246);
+                    doc.setDrawColor(209, 213, 219);
+                    doc.roundedRect(margin, y, contentWidth, 6, 1, 1, 'FD');
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(9);
+                    doc.setTextColor(31, 41, 55);
+                    doc.text('3. DATA QUALITY & SELF-HEALING AUDIT', margin + 4, y + 4.2);
+                    y += 9.5;
+
+                    // Diff Grid
+                    doc.setFillColor(248, 250, 252);
+                    doc.rect(margin, y, contentWidth, 18, 'F');
+                    doc.setFontSize(7.5);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(100, 116, 139);
+                    doc.text('HEALTH METRIC', margin + 4, y + 4.5);
+                    doc.text('BEFORE CLEANING', margin + 65, y + 4.5);
+                    doc.text('AFTER REMEDIATION', margin + 115, y + 4.5);
+                    doc.text('DELTA / HEALTH', margin + 155, y + 4.5);
+
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(7.5);
+                    doc.setTextColor(30, 41, 59);
+
+                    // Row 1: Quality Score
+                    doc.text('Quality Score', margin + 4, y + 9.5);
+                    doc.text(`${diff.before.quality_score}%`, margin + 65, y + 9.5);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(16, 185, 129);
+                    doc.text(`${diff.after.quality_score}%`, margin + 115, y + 9.5);
+                    doc.text(`+${(diff.after.quality_score - diff.before.quality_score).toFixed(1)}%`, margin + 155, y + 9.5);
+
+                    // Row 2: Missing Cells
+                    doc.setFont('helvetica', 'normal');
+                    doc.setTextColor(30, 41, 59);
+                    doc.text('Missing Value Cells', margin + 4, y + 14.5);
+                    doc.text(String(diff.before.missing_cells), margin + 65, y + 14.5);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(16, 185, 129);
+                    doc.text(String(diff.after.missing_cells), margin + 115, y + 14.5);
+                    doc.text('100% Imputed', margin + 155, y + 14.5);
+
+                    y += 22;
+
+                    if (diff.changes && diff.changes.length > 0) {
+                        checkPageBreak(diff.changes.length * 4.5 + 4);
+                        doc.setFont('helvetica', 'bold');
+                        doc.setFontSize(7.5);
+                        doc.setTextColor(71, 85, 105);
+                        doc.text('Remediation Actions Executed:', margin, y);
+                        y += 4.5;
+                        diff.changes.forEach(c => {
+                            doc.setFont('helvetica', 'normal');
+                            doc.setFontSize(7.5);
+                            doc.setTextColor(100, 116, 139);
+                            doc.text(`• ${c}`, margin + 2, y);
+                            y += 4.2;
+                        });
+                        y += 3;
+                    }
+                }
+
+                // Section 4: Autonomous Feature Engineering Explanations
+                if (feTransformations.length > 0 || fe.total_synthetic > 0) {
+                    checkPageBreak(38);
+                    doc.setFillColor(243, 232, 255); // purple-100
+                    doc.setDrawColor(216, 180, 254);
+                    doc.roundedRect(margin, y, contentWidth, 6, 1, 1, 'FD');
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(9);
+                    doc.setTextColor(88, 28, 135); // purple-900
+                    doc.text('4. AUTONOMOUS FEATURE ENGINEERING & RATIONALE', margin + 4, y + 4.2);
+                    y += 9.5;
+
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(7.5);
+                    doc.setTextColor(51, 65, 85);
+                    const feSummaryLines = doc.splitTextToSize(feExplanation, contentWidth);
+                    doc.text(feSummaryLines, margin, y);
+                    y += feSummaryLines.length * 4 + 4;
+
+                    feTransformations.slice(0, 8).forEach((t) => {
+                        checkPageBreak(19);
+                        doc.setFillColor(248, 250, 252);
+                        doc.setDrawColor(226, 232, 240);
+                        doc.roundedRect(margin, y, contentWidth, 17, 1.5, 1.5, 'FD');
+
+                        doc.setFont('helvetica', 'bold');
+                        doc.setFontSize(8);
+                        doc.setTextColor(15, 23, 42);
+                        doc.text(String(t.name || t.feature), margin + 4, y + 4.5);
+
+                        doc.setFont('helvetica', 'normal');
+                        doc.setFontSize(7.5);
+                        doc.setTextColor(126, 34, 206); // purple-700
+                        doc.text(String(t.type || 'Transform'), margin + 65, y + 4.5);
+
+                        doc.setTextColor(100, 116, 139);
+                        doc.text(`Formula: ${String(t.formula || 'Custom')}`, margin + 122, y + 4.5);
+
+                        doc.setFont('helvetica', 'italic');
+                        doc.setFontSize(7.5);
+                        doc.setTextColor(71, 85, 105);
+                        const rLines = doc.splitTextToSize(`Why: ${t.rationale || 'Engineered to isolate higher-order variance.'}`, contentWidth - 8);
+                        doc.text(rLines[0] || '', margin + 4, y + 9.5);
+
+                        doc.setFont('helvetica', 'normal');
+                        doc.setTextColor(16, 185, 129); // emerald-600
+                        const impText = `Impact: ${t.impact || 'Supplied non-linear split planes.'}`;
+                        const impLines = doc.splitTextToSize(impText, contentWidth - 8);
+                        doc.text(impLines[0] || '', margin + 4, y + 14.5);
+
+                        y += 20;
+                    });
+                    y += 2;
+                }
+
+                // Section 5: Top Feature Importance Drivers
+                if (drivers.length > 0) {
+                    checkPageBreak(drivers.slice(0, 6).length * 5.5 + 14);
+                    doc.setFillColor(254, 243, 199); // amber-100
+                    doc.setDrawColor(251, 191, 36);
+                    doc.roundedRect(margin, y, contentWidth, 6, 1, 1, 'FD');
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(9);
+                    doc.setTextColor(120, 53, 15);
+                    doc.text('5. KEY PREDICTIVE FEATURE DRIVERS', margin + 4, y + 4.2);
+                    y += 9.5;
+
+                    drivers.slice(0, 6).forEach((d, idx) => {
+                        checkPageBreak(5.5);
+                        doc.setFont('helvetica', 'bold');
+                        doc.setFontSize(8);
+                        doc.setTextColor(30, 41, 59);
+                        doc.text(`#${idx + 1}  ${d.feature}`, margin + 4, y);
+
+                        // Progress bar fill
+                        const barMax = 65;
+                        const barWidth = Math.max(2, (d.percentage / 100) * barMax);
+                        doc.setFillColor(224, 231, 255);
+                        doc.rect(margin + 75, y - 3, barMax, 3.5, 'F');
+                        doc.setFillColor(99, 102, 241);
+                        doc.rect(margin + 75, y - 3, barWidth, 3.5, 'F');
+
+                        doc.setFont('helvetica', 'bold');
+                        doc.setTextColor(79, 70, 229);
+                        doc.text(`${d.percentage}%`, margin + 146, y);
+                        y += 5.5;
+                    });
+                    y += 3;
+                }
+
+                // Section 6: Recommendations
+                if (recs.length > 0) {
+                    checkPageBreak(recs.length * 8 + 14);
+                    doc.setFillColor(245, 243, 255); // purple-50
+                    doc.setDrawColor(221, 214, 254);
+                    doc.roundedRect(margin, y, contentWidth, 6, 1, 1, 'FD');
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(9);
+                    doc.setTextColor(88, 28, 135);
+                    doc.text('6. ACTIONABLE STRATEGIC RECOMMENDATIONS', margin + 4, y + 4.2);
+                    y += 9.5;
+
+                    recs.forEach((r, idx) => {
+                        checkPageBreak(12);
+                        doc.setFont('helvetica', 'bold');
+                        doc.setFontSize(8);
+                        doc.setTextColor(99, 102, 241);
+                        doc.text(`[Action ${idx + 1}]`, margin + 4, y);
+
+                        doc.setFont('helvetica', 'normal');
+                        doc.setFontSize(8);
+                        doc.setTextColor(51, 65, 85);
+                        const lines = doc.splitTextToSize(r, contentWidth - 8);
+                        doc.text(lines, margin + 4, y + 4);
+                        y += lines.length * 4 + 5;
+                    });
+                }
+
+                // Footer pagination on all pages
+                const totalPages = doc.internal.getNumberOfPages();
+                for (let i = 1; i <= totalPages; i++) {
+                    doc.setPage(i);
+                    doc.setFontSize(7.5);
+                    doc.setFont('helvetica', 'normal');
+                    doc.setTextColor(148, 163, 184);
+                    doc.text(
+                        `NexusDash Autonomous AI Engine • Page ${i} of ${totalPages} • Confidential`,
+                        margin,
+                        pageHeight - 8
+                    );
+                }
+
+                doc.save(`nexus_agent_executive_report_${targetCol}_${timestamp.slice(0, 10)}.pdf`);
+                addToast('Executive PDF report downloaded successfully!', 'success');
+            }
+        } catch (err) {
+            console.error('Failed to generate report:', err);
+            addToast(`Failed to generate report: ${err.message}`, 'error');
+        } finally {
+            setIsGeneratingReport(false);
+        }
     };
 
     // Helper for log badges
@@ -325,98 +885,222 @@ export default function AutonomousAgent() {
                     </div>
                 </div>
 
-                {/* Control Bar: Goal, Target, Speed & Quick Samples */}
-                <div className="mt-8 pt-6 border-t border-slate-800/80 grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                    {/* Goal Preset */}
-                    <div className="md:col-span-5 space-y-1.5">
-                        <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                            <Sparkles size={14} className="text-cyan-400" />
-                            Autonomous Agent Objective
-                        </label>
-                        <select
-                            value={selectedGoal}
-                            onChange={(e) => setSelectedGoal(e.target.value)}
-                            disabled={agentStatus === 'running'}
-                            className="w-full bg-slate-800/90 border border-slate-700 text-white text-sm rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-cyan-400 transition"
-                        >
-                            {GOAL_PRESETS.map(g => (
-                                <option key={g.id} value={g.label}>{g.label}</option>
-                            ))}
-                        </select>
-                    </div>
+                {/* Control Area: Natural Language Query & Prompt Command */}
+                <div className="mt-8 pt-6 border-t border-slate-800/80 space-y-4">
+                    {/* Dataset Scope Selector for Autonomous Agent */}
+                    {uploadedDatasets && uploadedDatasets.length > 1 && (
+                        <div className="flex items-center justify-between flex-wrap gap-2 p-2.5 bg-slate-950/70 border border-indigo-900/40 rounded-xl text-xs">
+                            <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                    <FolderKanban size={13} className="text-cyan-400" />
+                                    Agent Dataset Scope:
+                                </span>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                    isUnifiedMode 
+                                        ? 'bg-purple-900/70 text-purple-300 border border-purple-700/60' 
+                                        : 'bg-blue-900/70 text-blue-300 border border-blue-700/60'
+                                }`}>
+                                    {isUnifiedMode ? '✨ All Files Combined' : 'Single File Mode'}
+                                </span>
+                            </div>
 
-                    {/* Target Column */}
-                    <div className="md:col-span-3 space-y-1.5">
-                        <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                            <Database size={14} className="text-indigo-400" />
-                            Target Column
-                        </label>
-                        <select
-                            value={targetColumn}
-                            onChange={(e) => setTargetColumn(e.target.value)}
-                            disabled={agentStatus === 'running'}
-                            className="w-full bg-slate-800/90 border border-slate-700 text-white text-sm rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-400 transition"
-                        >
-                            <option value="auto">⚡ Auto-Detect Best Target</option>
-                            {dataSummary?.columns?.map(col => (
-                                <option key={col} value={col}>{col}</option>
-                            ))}
-                        </select>
-                    </div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                {/* Option 1: Use All Together */}
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        try {
+                                            await useAllFilesTogether('concat');
+                                            addToast('✨ Agent switched to Unified Master Dataset (all files combined)', 'success');
+                                        } catch (e) {
+                                            addToast(e.message, 'error');
+                                        }
+                                    }}
+                                    disabled={agentStatus === 'running'}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                                        isUnifiedMode
+                                            ? 'bg-purple-600 text-white shadow-sm ring-1 ring-purple-400'
+                                            : 'bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-700'
+                                    }`}
+                                >
+                                    <Sparkles size={12} className={isUnifiedMode ? '' : 'text-purple-400'} />
+                                    <span>All Files Combined</span>
+                                </button>
 
-                    {/* Execution Speed */}
-                    <div className="md:col-span-2 space-y-1.5">
-                        <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                            <Zap size={14} className="text-amber-400" />
-                            Execution Speed
-                        </label>
-                        <div className="grid grid-cols-2 gap-1 bg-slate-800/90 p-1 rounded-xl border border-slate-700">
+                                {/* Option 2: Individual Files */}
+                                {uploadedDatasets.filter(d => !d.isCombined).map(d => {
+                                    const isThisActive = !isUnifiedMode && (d.id === activeDatasetId || d.isActive);
+                                    return (
+                                        <button
+                                            key={d.id}
+                                            type="button"
+                                            onClick={async () => {
+                                                try {
+                                                    await useFileSeparately(d.id);
+                                                    addToast(`Switched agent target dataset to '${d.name}'`, 'info');
+                                                } catch (e) {
+                                                    addToast(e.message, 'error');
+                                                }
+                                            }}
+                                            disabled={agentStatus === 'running'}
+                                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all truncate max-w-[180px] ${
+                                                isThisActive
+                                                    ? 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-400'
+                                                    : 'bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-700'
+                                            }`}
+                                            title={d.name}
+                                        >
+                                            <FileText size={12} className={isThisActive ? '' : 'text-slate-400'} />
+                                            <span className="truncate">{d.name}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Primary Query Command Bar */}
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                            <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                                <Sparkles size={15} className="text-cyan-400 animate-pulse" />
+                                <span>Write Query / Instruct Autonomous Agent:</span>
+                            </label>
+                            <span className="text-[11px] text-slate-400 font-mono hidden sm:inline">
+                                Type any goal — the agent interprets targets & pipeline dynamically
+                            </span>
+                        </div>
+
+                        <div className="relative flex items-center">
+                            <input
+                                type="text"
+                                value={userQuery}
+                                onChange={(e) => setUserQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && agentStatus !== 'running' && dataSummary) {
+                                        handleLaunchAgent();
+                                    }
+                                }}
+                                disabled={agentStatus === 'running'}
+                                placeholder="e.g. 'Predict Weekly_Sales and discover key revenue drivers' or 'Clean data and classify high churn customers'..."
+                                className="w-full bg-slate-900/90 border-2 border-indigo-500/50 hover:border-indigo-400 focus:border-cyan-400 text-white placeholder-slate-500 text-sm md:text-base rounded-2xl pl-5 pr-36 py-3.5 shadow-inner focus:outline-none focus:ring-4 focus:ring-cyan-500/20 transition-all"
+                            />
                             <button
                                 type="button"
-                                onClick={() => setSpeedMode('live')}
-                                className={`text-xs font-medium py-1.5 rounded-lg transition ${
-                                    speedMode === 'live' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                                onClick={() => handleLaunchAgent()}
+                                disabled={agentStatus === 'running' || !dataSummary}
+                                className={`absolute right-2 px-5 py-2.5 rounded-xl font-bold text-xs md:text-sm flex items-center gap-1.5 shadow-lg transition-all ${
+                                    agentStatus === 'running'
+                                        ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                                        : !dataSummary
+                                        ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                                        : 'bg-gradient-to-r from-indigo-500 via-purple-600 to-cyan-500 hover:from-indigo-600 hover:to-cyan-600 text-white shadow-indigo-500/30 hover:scale-105 active:scale-95'
                                 }`}
                             >
-                                Live Stream
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setSpeedMode('turbo')}
-                                className={`text-xs font-medium py-1.5 rounded-lg transition ${
-                                    speedMode === 'turbo' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
-                                }`}
-                            >
-                                Turbo
+                                {agentStatus === 'running' ? (
+                                    <>
+                                        <RefreshCw size={15} className="animate-spin" />
+                                        <span>Running...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Play size={15} fill="currentColor" />
+                                        <span>Run Query</span>
+                                    </>
+                                )}
                             </button>
                         </div>
+
+                        {/* Suggested Query Pills */}
+                        {suggestedQueries.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Suggested Queries:</span>
+                                {suggestedQueries.map((sq, idx) => (
+                                    <button
+                                        key={idx}
+                                        type="button"
+                                        disabled={agentStatus === 'running'}
+                                        onClick={() => {
+                                            setUserQuery(sq);
+                                            handleLaunchAgent(sq);
+                                        }}
+                                        className="text-xs bg-slate-800/80 hover:bg-indigo-900/80 text-slate-300 hover:text-cyan-300 border border-slate-700 hover:border-cyan-500/50 px-2.5 py-1 rounded-lg transition shadow-sm"
+                                    >
+                                        ⚡ {sq}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
-                    {/* Launch Action */}
-                    <div className="md:col-span-2">
-                        <button
-                            onClick={handleLaunchAgent}
-                            disabled={agentStatus === 'running' || !dataSummary}
-                            className={`w-full py-2.5 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all duration-200 ${
-                                agentStatus === 'running'
-                                    ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                                    : !dataSummary
-                                    ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
-                                    : 'bg-gradient-to-r from-indigo-500 via-purple-600 to-cyan-500 hover:from-indigo-600 hover:to-cyan-600 text-white shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:-translate-y-0.5'
-                            }`}
-                        >
-                            {agentStatus === 'running' ? (
-                                <>
-                                    <RefreshCw size={16} className="animate-spin" />
-                                    <span>Executing...</span>
-                                </>
-                            ) : (
-                                <>
-                                    <Play size={16} fill="currentColor" />
-                                    <span>Launch Agent</span>
-                                </>
-                            )}
-                        </button>
+                    {/* Secondary Advanced Controls: Target, Presets, Speed */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end pt-2 border-t border-slate-800/40">
+                        {/* Preset Selector */}
+                        <div className="md:col-span-5 space-y-1">
+                            <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                                Or Quick Objective Preset
+                            </label>
+                            <select
+                                value={selectedGoal}
+                                onChange={(e) => {
+                                    setSelectedGoal(e.target.value);
+                                    setUserQuery(e.target.value);
+                                }}
+                                disabled={agentStatus === 'running'}
+                                className="w-full bg-slate-800/90 border border-slate-700 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-400 transition"
+                            >
+                                {GOAL_PRESETS.map(g => (
+                                    <option key={g.id} value={g.label}>{g.label}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Target Column */}
+                        <div className="md:col-span-4 space-y-1">
+                            <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                <Database size={12} className="text-indigo-400" />
+                                Target Column Override
+                            </label>
+                            <select
+                                value={targetColumn}
+                                onChange={(e) => setTargetColumn(e.target.value)}
+                                disabled={agentStatus === 'running'}
+                                className="w-full bg-slate-800/90 border border-slate-700 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-400 transition"
+                            >
+                                <option value="auto">⚡ Auto-Infer from Query / Dataset</option>
+                                {dataSummary?.columns?.map(col => (
+                                    <option key={col} value={col}>{col}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Execution Speed */}
+                        <div className="md:col-span-3 space-y-1">
+                            <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                <Zap size={12} className="text-amber-400" />
+                                Execution Speed
+                            </label>
+                            <div className="grid grid-cols-2 gap-1 bg-slate-800/90 p-1 rounded-xl border border-slate-700">
+                                <button
+                                    type="button"
+                                    onClick={() => setSpeedMode('live')}
+                                    className={`text-xs font-medium py-1 rounded-lg transition ${
+                                        speedMode === 'live' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                                    }`}
+                                >
+                                    Live Stream
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSpeedMode('turbo')}
+                                    className={`text-xs font-medium py-1 rounded-lg transition ${
+                                        speedMode === 'turbo' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                                    }`}
+                                >
+                                    Turbo
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -509,7 +1193,7 @@ export default function AutonomousAgent() {
 
                     {/* Quick Model Download / Export Card */}
                     {runData?.champion_model && (
-                        <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white rounded-2xl p-5 shadow-lg border border-indigo-800/40 space-y-3">
+                        <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white rounded-2xl p-5 shadow-lg border border-indigo-800/40 space-y-3.5">
                             <div className="flex items-center gap-2">
                                 <Award size={20} className="text-amber-400" />
                                 <h3 className="font-bold text-sm">Champion Artifact Ready</h3>
@@ -517,7 +1201,18 @@ export default function AutonomousAgent() {
                             <p className="text-xs text-indigo-200">
                                 {runData.champion_model.name} scored {runData.champion_model.metric_value} on {runData.champion_model.metric_name}.
                             </p>
-                            <div className="grid grid-cols-2 gap-2 pt-1">
+
+                            {/* Prominent Download Report Button */}
+                            <button
+                                onClick={() => handleDownloadReport('pdf')}
+                                disabled={isGeneratingReport}
+                                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition shadow-md shadow-emerald-600/30 disabled:opacity-50 cursor-pointer"
+                            >
+                                {isGeneratingReport ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
+                                <span>Download Report (PDF)</span>
+                            </button>
+
+                            <div className="grid grid-cols-2 gap-2 pt-0.5">
                                 <button
                                     onClick={handleDownloadModel}
                                     className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition"
@@ -526,13 +1221,21 @@ export default function AutonomousAgent() {
                                     <span>Model (.pkl)</span>
                                 </button>
                                 <button
-                                    onClick={handleCopyReport}
+                                    onClick={() => handleDownloadReport('md')}
                                     className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition border border-slate-700"
                                 >
-                                    {copiedBrief ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                                    <span>{copiedBrief ? 'Copied!' : 'Copy Brief'}</span>
+                                    <FileDown size={14} className="text-cyan-400" />
+                                    <span>Report (.md)</span>
                                 </button>
                             </div>
+
+                            <button
+                                onClick={handleCopyReport}
+                                className="w-full text-slate-400 hover:text-slate-200 text-[11px] font-mono py-1 flex items-center justify-center gap-1 transition"
+                            >
+                                {copiedBrief ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                                <span>{copiedBrief ? 'Copied brief to clipboard!' : 'Copy brief text'}</span>
+                            </button>
                         </div>
                     )}
                 </div>
@@ -601,6 +1304,103 @@ export default function AutonomousAgent() {
                         </div>
                     </div>
 
+                    {/* Executive Completion Action Banner */}
+                    {runData && (
+                        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/30 rounded-2xl p-4 md:p-5 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                            <div className="flex items-center gap-3.5">
+                                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-lg shadow-emerald-500/10">
+                                    <CheckCircle2 size={22} />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-white font-bold text-sm md:text-base">
+                                            Autonomous Pipeline Complete
+                                        </span>
+                                        <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-mono px-2 py-0.5 rounded-full border border-emerald-500/30 font-semibold">
+                                            {runData.champion_model?.name || 'Champion'} Crowned
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-slate-400 mt-0.5">
+                                        Target: <span className="text-indigo-300 font-mono font-medium">{runData.target_column}</span> • Score: <span className="text-emerald-400 font-bold">{runData.champion_model?.metric_value}</span> ({runData.champion_model?.metric_name}) • Duration: {runData.total_duration_ms}ms
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Download Buttons Group */}
+                            <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
+                                <button
+                                    onClick={() => handleDownloadReport('pdf')}
+                                    disabled={isGeneratingReport}
+                                    className="flex-1 md:flex-initial bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition shadow-lg shadow-indigo-600/30 disabled:opacity-50 cursor-pointer"
+                                >
+                                    {isGeneratingReport ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
+                                    <span>Download Report (PDF)</span>
+                                </button>
+                                <button
+                                    onClick={() => handleDownloadReport('md')}
+                                    title="Download report as Markdown document"
+                                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+                                >
+                                    <FileDown size={14} className="text-cyan-400" />
+                                    <span>Report (.md)</span>
+                                </button>
+                                <button
+                                    onClick={handleDownloadModel}
+                                    title="Download trained model serialized .pkl"
+                                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+                                >
+                                    <Download size={14} className="text-amber-400" />
+                                    <span>Model (.pkl)</span>
+                                </button>
+                            </div>
+
+                            {/* Auto-routed Platform Links */}
+                            <div className="w-full pt-3 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2 text-xs">
+                                <span className="text-slate-400 font-medium flex items-center gap-1.5">
+                                    <Sparkles size={13} className="text-indigo-400" />
+                                    Results auto-synced to destination pages:
+                                </span>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <button
+                                        onClick={() => navigate('/clean')}
+                                        className="bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 flex items-center gap-1.5 transition cursor-pointer"
+                                    >
+                                        <ShieldCheck size={13} className="text-emerald-400" />
+                                        <span>Cleaning Page</span>
+                                    </button>
+                                    <button
+                                        onClick={() => navigate('/features')}
+                                        className="bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 flex items-center gap-1.5 transition cursor-pointer"
+                                    >
+                                        <Sparkles size={13} className="text-indigo-400" />
+                                        <span>Feature Engineering</span>
+                                    </button>
+                                    <button
+                                        onClick={() => navigate('/model')}
+                                        className="bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 flex items-center gap-1.5 transition cursor-pointer"
+                                    >
+                                        <Award size={13} className="text-amber-400" />
+                                        <span>Model Studio</span>
+                                    </button>
+                                    <button
+                                        onClick={() => navigate('/predict')}
+                                        className="bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 flex items-center gap-1.5 transition cursor-pointer"
+                                    >
+                                        <Zap size={13} className="text-cyan-400" />
+                                        <span>Model Prediction</span>
+                                    </button>
+                                    <button
+                                        onClick={() => navigate('/dashboard/custom')}
+                                        className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-indigo-500 flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                                    >
+                                        <LayoutDashboard size={13} />
+                                        <span>AI Custom Dashboard ➔</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Results Workspace: Tabs & Visualizations */}
                     {runData && (
                         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
@@ -627,6 +1427,22 @@ export default function AutonomousAgent() {
                                 >
                                     <ShieldCheck size={15} />
                                     <span>Data Diff & Hygiene</span>
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('engineering')}
+                                    className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition shrink-0 ${
+                                        activeTab === 'engineering'
+                                            ? 'bg-white text-indigo-600 shadow-sm border border-slate-200'
+                                            : 'text-slate-600 hover:text-slate-900'
+                                    }`}
+                                >
+                                    <Sparkles size={15} className="text-amber-500" />
+                                    <span>Feature Engineering</span>
+                                    {runData.feature_engineering?.total_synthetic > 0 && (
+                                        <span className="bg-indigo-100 text-indigo-700 text-[10px] px-1.5 py-0.5 rounded-full font-mono">
+                                            +{runData.feature_engineering.total_synthetic}
+                                        </span>
+                                    )}
                                 </button>
                                 <button
                                     onClick={() => setActiveTab('drivers')}
@@ -796,6 +1612,101 @@ export default function AutonomousAgent() {
                                     </div>
                                 )}
 
+                                {/* TAB: Feature Engineering */}
+                                {activeTab === 'engineering' && (
+                                    <div className="space-y-6">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                            <div>
+                                                <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                                                    <Sparkles size={18} className="text-indigo-600" />
+                                                    Autonomous Feature Engineering & Synthesis
+                                                </h3>
+                                                <p className="text-xs text-slate-500 mt-0.5">
+                                                    Non-linear interaction terms, temporal seasonality, skewness normalizations, and categorical encodings.
+                                                </p>
+                                            </div>
+                                            {runData.feature_engineering?.total_synthetic !== undefined && (
+                                                <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1 rounded-full text-xs font-bold font-mono self-start sm:self-auto">
+                                                    +{runData.feature_engineering.total_synthetic} Synthetic Features
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Strategy Overview Card */}
+                                        <div className="bg-gradient-to-r from-indigo-50/90 via-purple-50/50 to-slate-50 border border-indigo-100/80 rounded-2xl p-5 space-y-2">
+                                            <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wider flex items-center gap-2">
+                                                <Bot size={15} className="text-indigo-600" />
+                                                Agent Transformation Strategy & Intuition
+                                            </h4>
+                                            <p className="text-xs text-slate-700 leading-relaxed">
+                                                {runData.feature_engineering?.explanation || (
+                                                    "The Autonomous Feature Engineering Engine synthesized predictive signals to uncover non-linear relationships, normalize skewed feature spaces, and stabilize variance across model benchmarks."
+                                                )}
+                                            </p>
+                                        </div>
+
+                                        {/* Transformation Cards / Registry */}
+                                        <div className="space-y-3">
+                                            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                                                Synthesized Features & Explanations ({runData.feature_engineering?.transformations?.length || 0})
+                                            </h4>
+
+                                            {(!runData.feature_engineering?.transformations || runData.feature_engineering.transformations.length === 0) ? (
+                                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-xs">
+                                                    All input features possessed optimal distributions. No additional non-linear expansions required for champion model.
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-1 gap-3.5">
+                                                    {runData.feature_engineering.transformations.map((t, idx) => (
+                                                        <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-indigo-300 transition space-y-2.5">
+                                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                    <span className="font-mono font-bold text-sm text-slate-900 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">
+                                                                        {t.name || t.feature}
+                                                                    </span>
+                                                                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                                                                        String(t.type || '').toLowerCase().includes('log') ? 'bg-purple-100 text-purple-700 border border-purple-200' :
+                                                                        String(t.type || '').toLowerCase().includes('temporal') || String(t.type || '').toLowerCase().includes('periodicity') ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                                                                        String(t.type || '').toLowerCase().includes('ratio') || String(t.type || '').toLowerCase().includes('interaction') ? 'bg-cyan-100 text-cyan-700 border border-cyan-200' :
+                                                                        'bg-amber-100 text-amber-700 border border-amber-200'
+                                                                    }`}>
+                                                                        {t.type || 'Engineered'}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="text-[11px] font-mono text-slate-500 flex items-center gap-2">
+                                                                    <span>Formula: <code className="text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded font-bold">{t.formula || 'Custom'}</code></span>
+                                                                    {t.source_columns && (
+                                                                        <span>• Source: <code className="text-slate-700">{Array.isArray(t.source_columns) ? t.source_columns.join(', ') : t.source_columns}</code></span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs pt-1">
+                                                                <div className="bg-slate-50/80 rounded-lg p-2.5 border border-slate-100 space-y-1">
+                                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                                                        Why Applied (AI Rationale)
+                                                                    </span>
+                                                                    <p className="text-slate-700 leading-relaxed">
+                                                                        {t.rationale || 'Engineered to isolate higher-order variance.'}
+                                                                    </p>
+                                                                </div>
+                                                                <div className="bg-emerald-50/50 rounded-lg p-2.5 border border-emerald-100 space-y-1">
+                                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                                                                        Statistical & Model Impact
+                                                                    </span>
+                                                                    <p className="text-emerald-900 leading-relaxed font-medium">
+                                                                        {t.impact || 'Supplied non-linear split planes to champion model.'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* TAB 3: Feature Drivers */}
                                 {activeTab === 'drivers' && (
                                     <div className="space-y-6">
@@ -835,6 +1746,36 @@ export default function AutonomousAgent() {
                                 {/* TAB 4: Executive Brief */}
                                 {activeTab === 'brief' && (
                                     <div className="space-y-6">
+                                        {/* Action Card inside Brief */}
+                                        <div className="bg-gradient-to-r from-indigo-50/90 via-slate-50 to-indigo-50/50 border border-indigo-100 rounded-2xl p-4 md:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+                                            <div className="space-y-1">
+                                                <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wider flex items-center gap-2">
+                                                    <FileText size={16} className="text-indigo-600" />
+                                                    Executive Intelligence Dossier Ready
+                                                </h4>
+                                                <p className="text-xs text-slate-600">
+                                                    Export the complete autonomous agent dossier including data quality diffs, tournament benchmarks, feature driver attribution, and strategic recommendations.
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <button
+                                                    onClick={() => handleDownloadReport('pdf')}
+                                                    disabled={isGeneratingReport}
+                                                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 transition shadow-md shadow-indigo-600/20 disabled:opacity-50 cursor-pointer"
+                                                >
+                                                    {isGeneratingReport ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+                                                    <span>Download PDF Report</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDownloadReport('md')}
+                                                    className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-semibold py-2.5 px-3.5 rounded-xl flex items-center gap-1.5 transition shadow-sm cursor-pointer"
+                                                >
+                                                    <FileDown size={14} className="text-slate-500" />
+                                                    <span>Markdown (.md)</span>
+                                                </button>
+                                            </div>
+                                        </div>
+
                                         <div className="prose prose-sm max-w-none text-slate-700">
                                             <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 leading-relaxed">
                                                 <h4 className="text-sm font-bold text-slate-900 mb-2 flex items-center gap-2">
@@ -843,6 +1784,45 @@ export default function AutonomousAgent() {
                                                 </h4>
                                                 <p className="text-xs text-slate-600">{runData.executive_summary}</p>
                                             </div>
+                                        </div>
+
+                                        {/* Feature Engineering Highlights inside Brief */}
+                                        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3">
+                                            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center justify-between">
+                                                <span className="flex items-center gap-2">
+                                                    <Sparkles size={15} className="text-indigo-600" />
+                                                    Autonomous Feature Engineering & Synthesis Insights
+                                                </span>
+                                                {runData.feature_engineering?.total_synthetic > 0 && (
+                                                    <span className="bg-indigo-50 text-indigo-700 font-mono text-[11px] px-2 py-0.5 rounded-full border border-indigo-100">
+                                                        +{runData.feature_engineering.total_synthetic} engineered signals
+                                                    </span>
+                                                )}
+                                            </h4>
+                                            <p className="text-xs text-slate-600 leading-relaxed">
+                                                {runData.feature_engineering?.explanation || (
+                                                    "The Autonomous Feature Engineering Engine synthesized predictive signals to uncover non-linear relationships, normalize skewed feature spaces, and stabilize variance across model benchmarks."
+                                                )}
+                                            </p>
+                                            {runData.feature_engineering?.transformations && runData.feature_engineering.transformations.length > 0 && (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+                                                    {runData.feature_engineering.transformations.slice(0, 6).map((t, idx) => (
+                                                        <div key={idx} className="bg-slate-50 rounded-lg p-2.5 border border-slate-100 space-y-1">
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="font-mono font-bold text-[11px] text-slate-800 truncate">
+                                                                    {t.name || t.feature}
+                                                                </span>
+                                                                <span className="text-[9px] font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.2 rounded uppercase">
+                                                                    {t.type?.split(' ')[0] || 'Engineered'}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-[11px] text-slate-500 line-clamp-2">
+                                                                {t.rationale}
+                                                            </p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
 
                                         <div className="space-y-3">

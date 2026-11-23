@@ -11,8 +11,8 @@ router = APIRouter()
 def connect_db(request: DatabaseConnectRequest):
     try:
         df = pd.DataFrame()
-        # 1. PostgreSQL / Redshift
-        if request.db_type in ["postgresql", "redshift"]:
+        # 1. PostgreSQL / Redshift / SQLite / MySQL
+        if request.db_type in ["postgresql", "redshift", "sqlite", "mysql"]:
             if not request.query: raise HTTPException(status_code=400, detail="Query required")
             engine = create_engine(request.connection_string)
             with engine.connect() as connection:

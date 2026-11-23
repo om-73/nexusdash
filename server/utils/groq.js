@@ -11,7 +11,7 @@ async function chat(messages, options = {}) {
         throw new Error("GROQ_API_KEY is not configured in the environment.");
     }
 
-    const model = options.model || "llama-3.3-70b-versatile";
+    const model = options.model || "openai/gpt-oss-120b";
     const endpoint = "https://api.groq.com/openai/v1/chat/completions";
 
     // Format messages for Groq API (standard OpenAI format)

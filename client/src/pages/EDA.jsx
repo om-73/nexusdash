@@ -148,12 +148,12 @@ export default function EDA() {
                                             {Object.entries(distributions).map(([col, data]) => (
                                                 <div key={col} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                                                     <h3 className="font-medium text-slate-700 mb-4">{col}</h3>
-                                                    <div className="h-48">
-                                                        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                                                            <BarChart data={data}>
+                                                    <div className="h-56">
+                                                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={180}>
+                                                            <BarChart data={data} margin={{ bottom: 25 }}>
                                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                                                <XAxis dataKey="range" tick={{ fontSize: 0 }} />
-                                                                <YAxis />
+                                                                <XAxis dataKey="range" tick={{ fontSize: 9, angle: -25, textAnchor: 'end' }} height={35} interval="preserveStartEnd" />
+                                                                <YAxis tick={{ fontSize: 10 }} />
                                                                 <Tooltip />
                                                                 <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                                                             </BarChart>
@@ -405,8 +405,8 @@ const CorrelationHeatmap = ({ data }) => {
 
 const SimpleBoxPlot = ({ stats }) => {
     const { min, q1, median, q3, max } = stats;
-    const range = max - min;
-    const getPos = (val) => ((val - min) / range) * 100;
+    const range = (max - min) || 1;
+    const getPos = (val) => Math.max(0, Math.min(100, ((val - min) / range) * 100));
 
     return (
         <div className="w-full h-full relative">

@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
 import { Download, Loader } from 'lucide-react';
-import jsPDF from 'jspdf';
-import { toPng } from 'html-to-image';
 
 export default function ReportGenerator({ targetId = 'root', fileName = 'report.pdf' }) {
     const [loading, setLoading] = useState(false);
@@ -15,6 +13,13 @@ export default function ReportGenerator({ targetId = 'root', fileName = 'report.
 
         setLoading(true);
         try {
+            // Dynamically import heavy PDF and canvas libraries only when requested
+            const [jspdfModule, { toPng }] = await Promise.all([
+                import('jspdf'),
+                import('html-to-image')
+            ]);
+            const jsPDF = jspdfModule.jsPDF || jspdfModule.default?.jsPDF || jspdfModule.default;
+
             const imgData = await toPng(input, { cacheBust: true, pixelRatio: 2 });
             const pdf = new jsPDF('p', 'mm', 'a4');
 
@@ -26,10 +31,7 @@ export default function ReportGenerator({ targetId = 'root', fileName = 'report.
             const imgHeight = (imgProperties.height * imgWidth) / imgProperties.width;
 
             // Simplified single page fit or multi-page handling
-            // For now, simple single long image scaling or just fitting as much as possible
             if (imgHeight > pdfHeight) {
-                // If it's too long, we might just scale it to fit or let it stretch (not ideal)
-                // MVP: Just add it
                 pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
             } else {
                 pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
@@ -55,3 +57,4 @@ export default function ReportGenerator({ targetId = 'root', fileName = 'report.
         </button>
     );
 }
+

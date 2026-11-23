@@ -2,11 +2,11 @@ const fs = require('fs');
 const path = require('path');
 const fsp = fs.promises;
 
-const ONE_HOUR = 60 * 60 * 1000;
-const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+const THIRTY_MINUTES = 30 * 60 * 1000;
+const TEN_MINUTES = 10 * 60 * 1000;
 const FILE_RETENTION_TIME = process.env.FILE_RETENTION_HOURS ? 
     (parseInt(process.env.FILE_RETENTION_HOURS) * 60 * 60 * 1000) : 
-    TWENTY_FOUR_HOURS;
+    THIRTY_MINUTES;
 
 /**
  * Setup recurring cleanup task for upload directory using fs.promises
@@ -14,7 +14,7 @@ const FILE_RETENTION_TIME = process.env.FILE_RETENTION_HOURS ?
  */
 const setupCleanupSchedule = (uploadDir) => {
     console.log(`[Cleanup] Initialized schedule for ${uploadDir}`);
-    console.log(`[Cleanup] File retention time: ${FILE_RETENTION_TIME / (60 * 60 * 1000)} hours`);
+    console.log(`[Cleanup] File retention time: ${FILE_RETENTION_TIME / (60 * 1000)} minutes`);
 
     const runCleanup = async () => {
         console.log('[Cleanup] Running scheduled cleanup...');
@@ -32,12 +32,12 @@ const setupCleanupSchedule = (uploadDir) => {
                 try {
                     const stats = await fsp.stat(filePath);
                     const age = now - stats.mtimeMs;
-                    const ageHours = (age / (60 * 60 * 1000)).toFixed(2);
+                    const ageMinutes = (age / (60 * 1000)).toFixed(1);
 
                     if (age > FILE_RETENTION_TIME) {
                         const sizeKB = (stats.size / 1024).toFixed(2);
                         await fsp.unlink(filePath);
-                        console.log(`[Cleanup] Deleted old file: ${file} (${ageHours}h old, ${sizeKB}KB)`);
+                        console.log(`[Cleanup] Deleted session file: ${file} (${ageMinutes}m old, ${sizeKB}KB)`);
                         deletedCount++;
                         totalSize += stats.size;
                     }
@@ -56,7 +56,7 @@ const setupCleanupSchedule = (uploadDir) => {
     };
 
     runCleanup(); // Run once on startup
-    setInterval(runCleanup, ONE_HOUR); // Run every hour
+    setInterval(runCleanup, TEN_MINUTES); // Run every 10 minutes
 };
 
 /**

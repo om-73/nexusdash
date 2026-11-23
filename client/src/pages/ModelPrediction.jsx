@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useData } from '../context/DataContext';
 import { getModelMetadata, predictModel, downloadModel } from '../services/api';
-import { AlertCircle, CheckCircle, Info, ArrowRight } from 'lucide-react';
+import { AlertCircle, CheckCircle, Info, ArrowRight, Zap, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const ModelPrediction = () => {
+    const { predictionResult, modelResult } = useData();
     const [metadata, setMetadata] = useState(null);
     const [inputs, setInputs] = useState({});
     const [prediction, setPrediction] = useState(null);
@@ -22,12 +24,20 @@ const ModelPrediction = () => {
             const data = await getModelMetadata();
             setMetadata(data);
 
-            // Initialize inputs
+            // Initialize inputs - prefill with synced sample inputs from agent run if available
             const initialInputs = {};
             data?.features?.forEach(feature => {
-                initialInputs[feature] = '';
+                if (predictionResult?.sample_inputs && predictionResult.sample_inputs[feature] !== undefined) {
+                    initialInputs[feature] = predictionResult.sample_inputs[feature];
+                } else {
+                    initialInputs[feature] = '';
+                }
             });
             setInputs(initialInputs);
+
+            if (predictionResult?.prediction !== null && predictionResult?.prediction !== undefined) {
+                setPrediction(predictionResult.prediction);
+            }
             setError(null);
         } catch (err) {
             console.error(err);
@@ -115,6 +125,30 @@ const ModelPrediction = () => {
                     Download Model
                 </button>
             </div>
+
+            {/* Synced Model Status Banner */}
+            {predictionResult && (
+                <div className="mb-6 bg-gradient-to-r from-cyan-50 via-sky-50 to-indigo-50 border border-cyan-200/80 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-cyan-600 text-white flex items-center justify-center shadow-xs">
+                            <Zap size={16} />
+                        </div>
+                        <div>
+                            <h3 className="text-xs font-bold text-cyan-950 flex items-center gap-2">
+                                Champion Model Synced for Live Inference: <span className="text-indigo-600 font-mono">{predictionResult.model_name || metadata?.model_name || 'Champion'}</span>
+                            </h3>
+                            <p className="text-[11px] text-cyan-700">
+                                Target: <code className="font-bold">{predictionResult.target_column || metadata?.target_column}</code> • Inputs pre-populated with active model features & sample values.
+                            </p>
+                        </div>
+                    </div>
+                    {predictionResult.timestamp && (
+                        <span className="text-[10px] font-mono text-cyan-700 bg-white/90 px-2 py-0.5 rounded border border-cyan-200">
+                            Synced {new Date(predictionResult.timestamp).toLocaleTimeString()}
+                        </span>
+                    )}
+                </div>
+            )}
 
             <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-gray-100">
                 {/* Dataset Status Banner */}
