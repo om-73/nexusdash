@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import time
 import os
+import json
 import hashlib
 import uuid
 import sys
@@ -551,12 +552,14 @@ def run_autonomous_agent(
     # Step 3d: Categorical Feature Encoding
     from sklearn.preprocessing import LabelEncoder
     encoding_maps = {}
+    label_encoders = {}
     modeling_df = engineered_df.copy()
     cat_cols = modeling_df.select_dtypes(include=['object', 'category', 'bool']).columns.tolist()
 
     for col in cat_cols:
         le = LabelEncoder()
         modeling_df[col] = le.fit_transform(modeling_df[col].astype(str))
+        label_encoders[col] = le
         num_classes = len(le.classes_)
         encoding_maps[col] = {str(cls): int(idx) for idx, cls in enumerate(le.classes_)}
         feature_transformations.append({
@@ -603,6 +606,7 @@ def run_autonomous_agent(
     if inferred_type == "classification" and not pd.api.types.is_numeric_dtype(y):
         target_le = LabelEncoder()
         y = pd.Series(target_le.fit_transform(y.astype(str)), index=modeling_df.index)
+        label_encoders[target_column] = target_le
 
     stratify_target = None
     if inferred_type == "classification":
@@ -870,6 +874,54 @@ def run_autonomous_agent(
         "duration_ms": stage5_duration,
         "summary": f"Top drivers: {', '.join(top_3_drivers)}."
     })
+
+    # -------------------------------------------------------------------------
+    # Persist Champion Model, Encoders, and Standardized Metadata
+    # -------------------------------------------------------------------------
+    try:
+        import joblib
+        models_dir = os.path.join(root_dir, "models")
+        os.makedirs(models_dir, exist_ok=True)
+
+        feature_types = {c: str(modeling_df[c].dtype) for c in feature_cols}
+        feat_imp_dict = {f["feature"]: float(f["importance"]) for f in feature_importances} if feature_importances else {}
+
+        champion_metadata = {
+            "type": champion_name,
+            "model_type": champion_name,
+            "model_name": champion_name,
+            "is_classifier": (inferred_type == "classification"),
+            "problem_type": inferred_type,
+            "target": target_column,
+            "target_column": target_column,
+            "features": feature_cols,
+            "feature_columns": feature_cols,
+            "feature_types": feature_types,
+            "feature_importance": feat_imp_dict,
+            "feature_importances_list": feature_importances,
+            "metrics": next((r for r in tournament_results if r.get("is_champion")), tournament_results[0] if tournament_results else {}),
+            "synthetic_features": synthetic_features_created,
+            "dataset_loaded": True,
+            "matched_features": feature_cols,
+            "trained_at": datetime.now().isoformat()
+        }
+
+        state.set_active_model(champion_model_obj)
+        state.set_active_model_metadata(champion_metadata)
+        if hasattr(state, "set_active_encoders"):
+            state.set_active_encoders(label_encoders)
+
+        model_path = os.path.join(models_dir, "model.pkl")
+        encoders_path = os.path.join(models_dir, "encoders.pkl")
+        metadata_path = os.path.join(models_dir, "metadata.json")
+
+        joblib.dump(champion_model_obj, model_path)
+        joblib.dump(label_encoders, encoders_path)
+        with open(metadata_path, "w") as f:
+            json.dump(champion_metadata, f, indent=4)
+        log(5, "tool", f"💾 Champion '{champion_name}' model, encoders & metadata persisted to disk for inference.")
+    except Exception as save_err:
+        print(f"[Warning] Failed to persist champion model artifacts to disk: {save_err}")
 
     # ----------------------------------------------------
     # STAGE 6: Executive Synthesis & Actionable Recommendations

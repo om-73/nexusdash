@@ -1,1 +1,138 @@
-{"target_column": "AGE", "problem_type": "regression", "metrics": {"r2": -0.01034631697189714, "mse": 51.05665784714489}, "best_algorithm": "Linear Regression", "download_available": true, "actual_preview": [60, 59, 73, 70, 53, 56, 75, 56, 64, 54], "predictions_preview": [63.06349206349206, 62.396694214876035, 62.396694214876035, 62.396694214876035, 63.06349206349206, 63.06349206349206, 63.06349206349206, 62.396694214876035, 63.06349206349206, 62.396694214876035], "comparison": [{"algorithm": "Linear Regression", "metrics": {"r2": -0.01034631697189714, "mse": 51.05665784714489}}], "feature_importance": {"GENDER": 0.6667978486160314}, "classification_report": {}, "features": ["GENDER"], "feature_types": {"GENDER": "object"}}
+{
+    "type": "Logistic Regression",
+    "model_type": "Logistic Regression",
+    "model_name": "Logistic Regression",
+    "is_classifier": true,
+    "problem_type": "classification",
+    "target": "Churn",
+    "target_column": "Churn",
+    "features": [
+        "SeniorCitizen",
+        "TenureMonths",
+        "Contract",
+        "TechSupport",
+        "PaperlessBilling",
+        "PaymentMethod",
+        "MonthlyCharges",
+        "TotalCharges",
+        "log_SeniorCitizen",
+        "TenureMonths_to_MonthlyCharges_ratio"
+    ],
+    "feature_columns": [
+        "SeniorCitizen",
+        "TenureMonths",
+        "Contract",
+        "TechSupport",
+        "PaperlessBilling",
+        "PaymentMethod",
+        "MonthlyCharges",
+        "TotalCharges",
+        "log_SeniorCitizen",
+        "TenureMonths_to_MonthlyCharges_ratio"
+    ],
+    "feature_types": {
+        "SeniorCitizen": "int64",
+        "TenureMonths": "int64",
+        "Contract": "int64",
+        "TechSupport": "int64",
+        "PaperlessBilling": "int64",
+        "PaymentMethod": "int64",
+        "MonthlyCharges": "float64",
+        "TotalCharges": "float64",
+        "log_SeniorCitizen": "float64",
+        "TenureMonths_to_MonthlyCharges_ratio": "float64"
+    },
+    "feature_importance": {
+        "Contract": 0.845,
+        "TechSupport": 0.4965,
+        "TenureMonths_to_MonthlyCharges_ratio": 0.2323,
+        "PaperlessBilling": 0.1775,
+        "SeniorCitizen": 0.1144,
+        "log_SeniorCitizen": 0.0793,
+        "TenureMonths": 0.0303,
+        "PaymentMethod": 0.0197,
+        "MonthlyCharges": 0.0068,
+        "TotalCharges": 0.0001
+    },
+    "feature_importances_list": [
+        {
+            "feature": "Contract",
+            "importance": 0.845,
+            "percentage": 42.21
+        },
+        {
+            "feature": "TechSupport",
+            "importance": 0.4965,
+            "percentage": 24.8
+        },
+        {
+            "feature": "TenureMonths_to_MonthlyCharges_ratio",
+            "importance": 0.2323,
+            "percentage": 11.6
+        },
+        {
+            "feature": "PaperlessBilling",
+            "importance": 0.1775,
+            "percentage": 8.87
+        },
+        {
+            "feature": "SeniorCitizen",
+            "importance": 0.1144,
+            "percentage": 5.71
+        },
+        {
+            "feature": "log_SeniorCitizen",
+            "importance": 0.0793,
+            "percentage": 3.96
+        },
+        {
+            "feature": "TenureMonths",
+            "importance": 0.0303,
+            "percentage": 1.51
+        },
+        {
+            "feature": "PaymentMethod",
+            "importance": 0.0197,
+            "percentage": 0.99
+        },
+        {
+            "feature": "MonthlyCharges",
+            "importance": 0.0068,
+            "percentage": 0.34
+        },
+        {
+            "feature": "TotalCharges",
+            "importance": 0.0001,
+            "percentage": 0.0
+        }
+    ],
+    "metrics": {
+        "model_name": "Logistic Regression",
+        "primary_metric_name": "Accuracy",
+        "primary_metric": 73.33,
+        "secondary_metric_name": "F1 Score",
+        "secondary_metric": 0.685,
+        "precision": 0.742,
+        "recall": 0.733,
+        "latency_ms": 37,
+        "is_champion": true
+    },
+    "synthetic_features": [
+        "log_SeniorCitizen",
+        "TenureMonths_to_MonthlyCharges_ratio"
+    ],
+    "dataset_loaded": true,
+    "matched_features": [
+        "SeniorCitizen",
+        "TenureMonths",
+        "Contract",
+        "TechSupport",
+        "PaperlessBilling",
+        "PaymentMethod",
+        "MonthlyCharges",
+        "TotalCharges",
+        "log_SeniorCitizen",
+        "TenureMonths_to_MonthlyCharges_ratio"
+    ],
+    "trained_at": "2026-11-23T17:31:17.219225"
+}

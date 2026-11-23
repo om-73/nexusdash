@@ -10,6 +10,7 @@ action_history: List[str] = []
 redo_action_history: List[str] = []
 active_model = None
 active_model_metadata: Optional[dict] = None
+active_encoders: dict = {}
 
 def get_active_df():
     global active_df
@@ -54,8 +55,16 @@ def set_active_model_metadata(metadata: dict):
     global active_model_metadata
     active_model_metadata = metadata
 
+def get_active_encoders():
+    global active_encoders
+    return active_encoders
+
+def set_active_encoders(encoders: dict):
+    global active_encoders
+    active_encoders = encoders
+
 def reset_state(new_file_path: str = None):
-    global active_file_path, history_stack, redo_stack, action_history, redo_action_history, active_model, active_model_metadata
+    global active_file_path, history_stack, redo_stack, action_history, redo_action_history, active_model, active_model_metadata, active_encoders
     active_file_path = new_file_path
     history_stack.clear()
     redo_stack.clear()
@@ -63,3 +72,4 @@ def reset_state(new_file_path: str = None):
     redo_action_history.clear()
     active_model = None
     active_model_metadata = None
+    active_encoders = {}

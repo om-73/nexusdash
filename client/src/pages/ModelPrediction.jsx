@@ -26,7 +26,8 @@ const ModelPrediction = () => {
 
             // Initialize inputs - prefill with synced sample inputs from agent run if available
             const initialInputs = {};
-            data?.features?.forEach(feature => {
+            const featureList = data?.features || data?.feature_columns || [];
+            featureList.forEach(feature => {
                 if (predictionResult?.sample_inputs && predictionResult.sample_inputs[feature] !== undefined) {
                     initialInputs[feature] = predictionResult.sample_inputs[feature];
                 } else {
@@ -41,7 +42,7 @@ const ModelPrediction = () => {
             setError(null);
         } catch (err) {
             console.error(err);
-            setError("Failed to load model metadata. Ensure a model is trained.");
+            setError("Failed to load model metadata. Ensure a model is trained via AutoML Studio or the Autonomous Agent.");
         } finally {
             setLoading(false);
         }
@@ -151,47 +152,41 @@ const ModelPrediction = () => {
             )}
 
             <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-gray-100">
-                {/* Dataset Status Banner */}
-                {/* Dataset Status Banner */}
+                {/* Model Status Banner */}
                 <div className="mb-6">
-                    {metadata.dataset_loaded ? (
-                        metadata.matched_features && metadata.matched_features.length > 0 ? (
-                            <div className={`flex items-center gap-3 border p-4 rounded-lg mb-4 ${metadata.matched_features.length === (metadata?.features?.length || 0) ? 'bg-green-50 border-green-200 text-green-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
-                                {metadata.matched_features.length === (metadata?.features?.length || 0) ? <CheckCircle size={20} /> : <Info size={20} />}
-                                <div>
-                                    <p className="font-semibold">Dataset Loaded</p>
-                                    <p className="text-sm">
-                                        Matched {metadata.matched_features.length} / {metadata?.features?.length || 0} features.
-                                    </p>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-3 border p-4 rounded-lg mb-4 bg-red-50 border-red-200 text-red-800">
-                                <AlertCircle size={20} />
-                                <div>
-                                    <p className="font-semibold">No Dataset Loaded</p>
-                                    <p className="text-sm">Please train a model first to load a dataset.</p>
-                                </div>
-                            </div>
-                        )
-                    ) : (
-                        <div className="flex items-center gap-3 border p-4 rounded-lg mb-4 bg-red-50 border-red-200 text-red-800">
-                            <AlertCircle size={20} />
+                    {metadata ? (
+                        <div className="flex items-center gap-3 border p-4 rounded-xl mb-4 bg-emerald-50 border-emerald-200 text-emerald-800">
+                            <CheckCircle size={20} className="text-emerald-600 flex-shrink-0" />
                             <div>
-                                <p className="font-semibold">No Dataset Loaded</p>
-                                <p className="text-sm">Please train a model first to load a dataset.</p>
+                                <p className="font-semibold text-sm">Model Loaded & Ready for Inference</p>
+                                <p className="text-xs text-emerald-700">
+                                    Algorithm: <strong>{metadata.type || metadata.model_type || metadata.model_name || "Trained Model"}</strong> • Target: <strong>{metadata.target || metadata.target_column || "Target"}</strong> ({metadata.is_classifier || metadata.problem_type === 'classification' ? "Classification" : "Regression"}) • Input Dimensions: <strong>{(metadata.features || metadata.feature_columns || []).length} features</strong>
+                                </p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-3 border p-4 rounded-xl mb-4 bg-amber-50 border-amber-200 text-amber-800">
+                            <AlertCircle size={20} className="text-amber-600 flex-shrink-0" />
+                            <div>
+                                <p className="font-semibold text-sm">No Trained Model Found</p>
+                                <p className="text-xs text-amber-700">Please train a model in Model Studio or launch the Autonomous Agent first.</p>
                             </div>
                         </div>
                     )}
                 </div>
 
-                <div className="mb-6">
-                    <span className="inline-block px-3 py-1 rounded-full text-sm font-semibold bg-blue-100 text-blue-800 mr-2">
-                        {metadata.type}
+                <div className="mb-6 flex flex-wrap gap-2">
+                    <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">
+                        {metadata?.type || metadata?.model_type || metadata?.model_name || "Model"}
                     </span>
-                    <span className="inline-block px-3 py-1 rounded-full text-sm font-semibold bg-purple-100 text-purple-800">
-                        {metadata.is_classifier ? "Classification" : "Regression"}
+                    <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
+                        {metadata?.is_classifier || metadata?.problem_type === 'classification' ? "Classification" : "Regression"}
                     </span>
+                    {(metadata?.target || metadata?.target_column) && (
+                        <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                            Target: {metadata.target || metadata.target_column}
+                        </span>
+                    )}
                 </div>
 
                 {/* Tabs for Single vs Batch Prediction */}
@@ -216,8 +211,8 @@ const ModelPrediction = () => {
                         {/* Single Predict Form */}
                         {activeTab === 'single' && (
                             <form onSubmit={handlePredict} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {metadata?.features?.map(feature => {
-                                    const type = metadata.feature_types?.[feature] || '';
+                                {(metadata?.features || metadata?.feature_columns || Object.keys(inputs)).map(feature => {
+                                    const type = metadata?.feature_types?.[feature] || '';
                                     const isTextType = type === 'text' || type === 'object' || type === 'string' || type === 'category';
                                     const isTextHeuristic = /(name|text|desc|msg|message|caption|title|label|category|type|status|group|id)/i.test(feature);
                                     const isText = isTextType || isTextHeuristic;
@@ -290,7 +285,7 @@ const ModelPrediction = () => {
                             </div>
                         )}
 
-                        {prediction && (
+                        {prediction !== null && prediction !== undefined && (
                             <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-2xl border border-green-200 shadow-sm animate-fade-in relative overflow-hidden">
                                 <div className="absolute -top-4 -right-4 text-green-200 opacity-50">
                                     <CheckCircle size={120} />
@@ -300,16 +295,16 @@ const ModelPrediction = () => {
                                 </h3>
                                 <div className="mt-4 relative z-10">
                                     <p className="text-sm text-green-700 uppercase tracking-wider font-semibold mb-1">
-                                        Predicted Result for Target <span className="text-green-900 border-b-2 border-green-400 pb-0.5 ml-1">{metadata?.target_column || "Value"}</span>
+                                        Predicted Result for Target <span className="text-green-900 border-b-2 border-green-400 pb-0.5 ml-1">{metadata?.target || metadata?.target_column || "Target"}</span>
                                     </p>
                                     <p className="text-4xl font-extrabold text-green-700 mt-3">
                                         {typeof prediction === 'number' && !Number.isInteger(prediction)
                                             ? prediction.toFixed(2)
-                                            : prediction}
+                                            : String(prediction)}
                                     </p>
                                 </div>
                                 <div className="mt-6 pt-4 border-t border-green-200/50 relative z-10">
-                                    <p className="text-xs text-green-700/70">Based on Model: {metadata?.type} ({metadata?.is_classifier ? "Classification" : "Regression"})</p>
+                                    <p className="text-xs text-green-700/70">Based on Champion Model: {metadata?.type || metadata?.model_type || metadata?.model_name} ({metadata?.is_classifier || metadata?.problem_type === 'classification' ? "Classification" : "Regression"})</p>
                                 </div>
                             </div>
                         )}

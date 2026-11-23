@@ -298,7 +298,8 @@ def train_model(request: TrainRequest):
 
 @router.get("/model/download")
 def download_model():
-    model_path = "models/model.pkl"
+    models_dir = os.path.join(root_dir, "models")
+    model_path = os.path.join(models_dir, "model.pkl") if os.path.exists(os.path.join(models_dir, "model.pkl")) else "models/model.pkl"
     if not os.path.exists(model_path):
         raise HTTPException(status_code=404, detail="No trained model found")
     return FileResponse(model_path, media_type='application/octet-stream', filename="model.pkl")
@@ -308,7 +309,8 @@ def get_model_metadata():
     metadata = state.get_active_model_metadata()
     if metadata is None:
         # Try loading from disk
-        metadata_path = "models/metadata.json"
+        models_dir = os.path.join(root_dir, "models")
+        metadata_path = os.path.join(models_dir, "metadata.json") if os.path.exists(os.path.join(models_dir, "metadata.json")) else "models/metadata.json"
         if os.path.exists(metadata_path):
             try:
                 with open(metadata_path, 'r') as f:
@@ -318,15 +320,51 @@ def get_model_metadata():
                 raise HTTPException(status_code=500, detail="Failed to load metadata from disk")
         
     if metadata is None:
-        raise HTTPException(status_code=404, detail="No model metadata found. Please train a model first.")
-    return metadata
+        raise HTTPException(status_code=404, detail="No model metadata found. Please train a model or run the AI Agent first.")
+    
+    # Standardize metadata attributes so frontend can consume seamlessly
+    features = metadata.get("features") or metadata.get("feature_columns") or []
+    target = metadata.get("target") or metadata.get("target_column") or ""
+    model_type = metadata.get("type") or metadata.get("model_type") or metadata.get("model_name") or "Trained Model"
+    problem_type = metadata.get("problem_type") or ("classification" if metadata.get("is_classifier") else "regression")
+    is_classifier = metadata.get("is_classifier", problem_type == "classification")
+    feature_types = metadata.get("feature_types") or {}
+
+    active_df = state.get_active_df()
+    dataset_loaded = active_df is not None and not active_df.empty
+    matched_features = []
+    if dataset_loaded:
+        df_cols = set(active_df.columns)
+        matched_features = [f for f in features if f in df_cols]
+    else:
+        matched_features = features
+
+    enriched = dict(metadata)
+    enriched.update({
+        "features": features,
+        "feature_columns": features,
+        "target": target,
+        "target_column": target,
+        "type": model_type,
+        "model_type": model_type,
+        "model_name": model_type,
+        "is_classifier": is_classifier,
+        "problem_type": problem_type,
+        "feature_types": feature_types,
+        "dataset_loaded": True, # If metadata exists, allow prediction testing
+        "matched_features": matched_features
+    })
+    return enriched
 
 @router.post("/model/predict")
 def predict_model(request: PredictRequest):
     model = state.get_active_model()
+    models_dir = os.path.join(root_dir, "models")
+    model_path = os.path.join(models_dir, "model.pkl") if os.path.exists(os.path.join(models_dir, "model.pkl")) else "models/model.pkl"
+    metadata_path = os.path.join(models_dir, "metadata.json") if os.path.exists(os.path.join(models_dir, "metadata.json")) else "models/metadata.json"
+    encoders_path = os.path.join(models_dir, "encoders.pkl") if os.path.exists(os.path.join(models_dir, "encoders.pkl")) else "models/encoders.pkl"
+
     if model is None:
-        # Try loading from disk
-        model_path = "models/model.pkl"
         if os.path.exists(model_path):
             try:
                 model = joblib.load(model_path)
@@ -334,55 +372,70 @@ def predict_model(request: PredictRequest):
             except Exception:
                 raise HTTPException(status_code=400, detail="Failed to load model from disk")
         else:
-            raise HTTPException(status_code=400, detail="No model trained yet")
+            raise HTTPException(status_code=400, detail="No model trained yet. Please train a model or run the AI Agent.")
     
     try:
         metadata = state.get_active_model_metadata()
-        if not metadata:
-            metadata_path = "models/metadata.json"
-            if os.path.exists(metadata_path):
+        if not metadata and os.path.exists(metadata_path):
+            try:
                 with open(metadata_path, 'r') as f:
                     metadata = json.load(f)
+                    state.set_active_model_metadata(metadata)
+            except Exception:
+                pass
         
-        # Convert inputs dict to DataFrame for prediction
+        feature_cols = []
+        if metadata:
+            feature_cols = metadata.get("features") or metadata.get("feature_columns") or []
+        if not feature_cols:
+            feature_cols = list(request.inputs.keys())
+
+        # Construct input vector matching exact feature columns expected by the trained model
         input_data = {}
-        if metadata and "feature_importance" in metadata:
-            # We ordered features in feature_importance but the actual input might use another order
-            # Better to rely on the metadata features order if available, else fallback
-            feature_cols = list(metadata.get("features", request.inputs.keys()))
-            for col in feature_cols:
-                val = request.inputs.get(col, 0)
-                try:
-                    val = float(val)
-                except:
-                    pass
-                input_data[col] = [val]
-        else:
-            for k, v in request.inputs.items():
-                input_data[k] = [v]
+        for col in feature_cols:
+            val = request.inputs.get(col)
+            # Synthesize missing ratio feature on the fly if raw inputs are available
+            if val is None and "_div_" in col:
+                parts = col.split("_div_")
+                if len(parts) == 2 and parts[0] in request.inputs and parts[1] in request.inputs:
+                    try:
+                        v1 = float(request.inputs[parts[0]])
+                        v2 = float(request.inputs[parts[1]])
+                        val = v1 / (abs(v2) + 1e-5)
+                    except Exception:
+                        val = 0.0
+            # Synthesize missing log1p feature on the fly if raw inputs are available
+            elif val is None and col.endswith("_log1p"):
+                base_col = col[:-6]
+                if base_col in request.inputs:
+                    try:
+                        val = np.log1p(max(0.0, float(request.inputs[base_col])))
+                    except Exception:
+                        val = 0.0
+            
+            if val is None or val == '':
+                val = 0.0
+            input_data[col] = [val]
 
         input_df = pd.DataFrame(input_data)
         
-        # Load encoders
-        encoders = {}
-        encoders_path = "models/encoders.pkl"
-        if os.path.exists(encoders_path):
+        # Load encoders (check state first, then disk)
+        encoders = state.get_active_encoders() if hasattr(state, "get_active_encoders") else {}
+        if not encoders and os.path.exists(encoders_path):
             try:
                 encoders = joblib.load(encoders_path)
             except Exception:
-                pass
+                encoders = {}
                 
         # Apply encoding logic using the saved encoders
         for col in input_df.columns:
             if col in encoders:
                 try:
-                    # Safely transform; if unseen label, we map to a default or 0
                     le = encoders[col]
                     known_classes = set(le.classes_)
-                    
                     mapped = []
                     for val in input_df[col]:
-                        val_str = str(val) if pd.api.types.is_numeric_dtype(type(val)) else val
+                        val_str = str(val)
                         if val in known_classes:
                             mapped.append(le.transform([val])[0])
                         elif val_str in known_classes:
@@ -396,27 +449,45 @@ def predict_model(request: PredictRequest):
             elif not pd.api.types.is_numeric_dtype(input_df[col]):
                 input_df[col] = pd.to_numeric(input_df[col], errors='coerce').fillna(0)
 
+        # Run inference
         prediction = model.predict(input_df)
-        
-        # Handle numpy return types
         pred_val = prediction[0]
         if isinstance(pred_val, (np.generic, np.ndarray)):
             pred_val = pred_val.item()
             
-        # If target column was encoded, decode the prediction back to its string representation
-        if metadata and "target_column" in metadata:
-            target_col = metadata["target_column"]
-            if target_col in encoders:
-                try:
-                    le = encoders[target_col]
-                    pred_idx = int(round(pred_val))
-                    decoded = le.inverse_transform([pred_idx])[0]
-                    pred_val = str(decoded)
-                except Exception as e:
-                    print(f"Failed to decode prediction target: {e}")
+        # Probability estimation for classifiers
+        probability = None
+        if hasattr(model, "predict_proba"):
+            try:
+                probas = model.predict_proba(input_df)[0]
+                probability = float(np.max(probas))
+            except Exception:
+                pass
 
-        return {"prediction": pred_val}
+        # If target column was encoded, decode the prediction back to its string representation
+        target_col = None
+        if metadata:
+            target_col = metadata.get("target") or metadata.get("target_column")
+        if target_col and target_col in encoders:
+            try:
+                le = encoders[target_col]
+                pred_idx = int(round(pred_val))
+                if 0 <= pred_idx < len(le.classes_):
+                    pred_val = str(le.inverse_transform([pred_idx])[0])
+            except Exception as e:
+                print(f"Failed to decode prediction target: {e}")
+
+        response_payload = {
+            "prediction": pred_val,
+            "target": target_col,
+            "model_type": metadata.get("type") or metadata.get("model_type") or metadata.get("model_name") or type(model).__name__
+        }
+        if probability is not None:
+            response_payload["probability"] = round(probability, 4)
+        return response_payload
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 @router.post("/ai/configure")
 def configure_ai(request: AIConfigRequest):
