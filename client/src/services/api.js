@@ -34,23 +34,31 @@ const API_URL = getApiBaseUrl();
 
 export const api = axios.create({
     baseURL: API_URL,
-    timeout: 15000,
+    timeout: 120000, // 2-minute default to accommodate Render free-tier cold starts
 });
 
 
-// Request interceptor to log requests
+// Request interceptor to attach JWT token and log requests
 api.interceptors.request.use(request => {
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
+    if (token && !request.headers['Authorization']) {
+        request.headers['Authorization'] = `Bearer ${token}`;
+    }
     if (import.meta.env.DEV) {
         console.log('[API Request]', request.method.toUpperCase(), request.url);
     }
     return request;
 }, error => Promise.reject(error));
 
-// Response interceptor to log errors
+// Response interceptor to log errors with informative details
 api.interceptors.response.use(
     response => response,
     error => {
-        console.error('[API Error]', error.response?.status, error.response?.statusText, error.response?.data);
+        if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+            console.warn('[API Timeout]', error.config?.method?.toUpperCase(), error.config?.url, error.message);
+        } else {
+            console.error('[API Error]', error.response?.status, error.response?.statusText, error.response?.data || error.message);
+        }
 
         // Handle Token Expiry / Invalid Token (excluding auth endpoints to prevent reload loop)
         if (error.response?.status === 401 && !error.config?.url?.includes('/auth/')) {
@@ -66,21 +74,63 @@ api.interceptors.response.use(
 );
 
 export const uploadFile = async (fileOrFiles) => {
-    const formData = new FormData();
-    if (Array.isArray(fileOrFiles) || fileOrFiles instanceof FileList) {
-        Array.from(fileOrFiles).forEach((file) => {
-            formData.append('files', file);
-        });
-    } else {
-        formData.append('files', fileOrFiles);
-        formData.append('file', fileOrFiles);
+    const list = (Array.isArray(fileOrFiles) || fileOrFiles instanceof FileList)
+        ? Array.from(fileOrFiles)
+        : [fileOrFiles];
+
+    if (!list.length || !list[0]) {
+        throw new Error('No file provided to upload');
     }
 
-    const response = await api.post('/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 180000
-    });
-    return response.data;
+    // When uploading a single file, send field 'file' for 100% compatibility with
+    // both legacy multer single('file') and modern multer any() endpoints.
+    // For multiple files, send 'files' with transparent sequential fallback.
+    const formData = new FormData();
+    if (list.length === 1) {
+        formData.append('file', list[0]);
+    } else {
+        list.forEach((file) => {
+            formData.append('files', file);
+        });
+    }
+
+    try {
+        const response = await api.post('/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 180000
+        });
+        return response.data;
+    } catch (err) {
+        // Fallback for multi-file upload if the running backend only accepts single 'file' field
+        if (list.length > 1 && (err.response?.status === 400 && String(err.response?.data?.error).includes('Unexpected'))) {
+            console.warn('[uploadFile] Backend expected single file field. Uploading sequentially...');
+            const uploadedFiles = [];
+            for (const file of list) {
+                const singleFd = new FormData();
+                singleFd.append('file', file);
+                const res = await api.post('/upload', singleFd, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                    timeout: 180000
+                });
+                uploadedFiles.push({
+                    filePath: res.data.filePath,
+                    filename: res.data.filename,
+                    originalName: res.data.originalName || file.name,
+                    size: res.data.size || file.size
+                });
+            }
+            return {
+                message: `${uploadedFiles.length} files uploaded successfully`,
+                files: uploadedFiles,
+                count: uploadedFiles.length,
+                filePath: uploadedFiles[0].filePath,
+                filename: uploadedFiles[0].filename,
+                originalName: uploadedFiles[0].originalName,
+                size: uploadedFiles[0].size
+            };
+        }
+        throw err;
+    }
 };
 
 export const uploadFiles = async (files) => {
@@ -244,7 +294,7 @@ export const getDashboard = async (id) => {
 };
 
 export const getState = async () => {
-    const response = await api.get('/data/state');
+    const response = await api.get('/data/state', { timeout: 120000 });
     return response.data;
 };
 

@@ -447,7 +447,7 @@ export const DataProvider = ({ children }) => {
         }
 
         let isMounted = true;
-        const fetchState = async () => {
+        const fetchState = async (retries = 2) => {
             try {
                 const res = await getState();
                 if (!isMounted) return;
@@ -456,7 +456,15 @@ export const DataProvider = ({ children }) => {
                     if (res.preview) setDataPreview(res.preview);
                 }
             } catch (err) {
-                console.warn("Failed to restore state", err);
+                // If it timed out due to Render cold start, retry automatically
+                if (retries > 0 && (err.code === 'ECONNABORTED' || !err.response)) {
+                    console.info(`[DataContext] Backend may be waking up from cold start, retrying in 3s (${retries} left)...`);
+                    setTimeout(() => {
+                        if (isMounted) fetchState(retries - 1);
+                    }, 3000);
+                } else {
+                    console.warn("Failed to restore state", err?.message || err);
+                }
             }
         };
 

@@ -147,9 +147,11 @@ export default function DataLoad() {
             }
         } catch (err) {
             console.error('[DataLoad] Error:', err);
+            const isTimeout = err.code === 'ECONNABORTED' || String(err.message).includes('timeout');
             const errorMsg = err.response?.data?.message ||
                 err.response?.data?.error ||
                 err.response?.data?.detail ||
+                (isTimeout ? 'Server was waking up from sleep. Please try uploading again.' : null) ||
                 err.message ||
                 'Failed to upload/load files';
             setError(errorMsg);
